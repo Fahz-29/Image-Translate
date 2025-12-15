@@ -16,6 +16,21 @@ export interface SentenceExamples {
   future: SentencePair;
 }
 
+export interface SavedWord {
+  id: string;
+  thai: string;
+  english: string;
+  sentences?: SentenceExamples;
+  timestamp: number;
+}
+
+export interface Deck {
+  id: string;
+  name: string;
+  wordIds: string[];
+  createdAt: number;
+}
+
 export enum AppState {
   HOME = 'HOME',
   CAMERA = 'CAMERA',
@@ -23,4 +38,10 @@ export enum AppState {
   RESULT = 'RESULT',
   SENTENCES_LOADING = 'SENTENCES_LOADING',
   SENTENCES_VIEW = 'SENTENCES_VIEW'
+}
+
+export enum Tab {
+  HOME = 'HOME',
+  SAVED = 'SAVED',
+  FLASHCARDS = 'FLASHCARDS'
 }

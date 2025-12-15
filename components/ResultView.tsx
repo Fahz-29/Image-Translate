@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { DetectedObject } from '../types';
-import { BookOpenIcon, XMarkIcon, SpeakerIcon } from './Icons';
+import { BookOpenIcon, XMarkIcon, SpeakerIcon, BookmarkIcon, ChevronDownIcon, ChevronUpIcon } from './Icons';
 
 interface ResultViewProps {
   imageSrc: string;
@@ -9,6 +9,8 @@ interface ResultViewProps {
   onSelect: (index: number) => void;
   onClose: () => void;
   onShowSentences: () => void;
+  onSave: (obj: DetectedObject) => void;
+  isSaved: boolean;
 }
 
 const ResultView: React.FC<ResultViewProps> = ({ 
@@ -17,8 +19,11 @@ const ResultView: React.FC<ResultViewProps> = ({
   selectedIndex,
   onSelect,
   onClose, 
-  onShowSentences 
+  onShowSentences,
+  onSave,
+  isSaved
 }) => {
+  const [isMinimized, setIsMinimized] = useState(false);
   const currentObject = results[selectedIndex];
 
   // Helper to convert normalized coordinates [ymin, xmin, ymax, xmax] to style percentages
@@ -55,7 +60,7 @@ const ResultView: React.FC<ResultViewProps> = ({
       </div>
 
       {/* Main Image Area */}
-      <div className="relative flex-1 w-full flex items-center justify-center p-4 pb-20 z-10">
+      <div className={`relative flex-1 w-full flex items-center justify-center p-4 transition-all duration-500 ${isMinimized ? 'pb-24' : 'pb-64'} z-10`}>
         
         {/* Close Button */}
         <button 
@@ -66,12 +71,12 @@ const ResultView: React.FC<ResultViewProps> = ({
         </button>
 
         {/* Image Wrapper (Size to fit image) */}
-        <div className="relative shadow-2xl rounded-lg overflow-hidden max-h-[60vh]">
+        <div className="relative shadow-2xl rounded-lg overflow-hidden max-h-[70vh]">
           {/* Main Image - object-contain-like behavior via CSS flow */}
           <img 
             src={imageSrc} 
             alt="Captured" 
-            className="block max-w-full max-h-[60vh] w-auto h-auto object-contain"
+            className="block max-w-full max-h-[70vh] w-auto h-auto object-contain"
           />
 
           {/* Bounding Boxes Overlay */}
@@ -87,27 +92,38 @@ const ResultView: React.FC<ResultViewProps> = ({
               }`}
             >
               {/* Label Tag on Box */}
-              <span className={`absolute -top-7 left-0 px-2 py-0.5 text-xs rounded shadow-sm backdrop-blur-md whitespace-nowrap transition-colors flex items-center space-x-1 ${
-                 selectedIndex === idx
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-black/50 text-white/80'
-              }`}>
-                <span className="font-bold">{obj.english}</span>
-                <span className="opacity-75 text-[10px] border-l border-white/20 pl-1 ml-1 font-mono">
-                  {Math.round(obj.confidence * 100)}%
+              {!isMinimized && (
+                <span className={`absolute -top-7 left-0 px-2 py-0.5 text-xs rounded shadow-sm backdrop-blur-md whitespace-nowrap transition-colors flex items-center space-x-1 ${
+                    selectedIndex === idx
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-black/50 text-white/80'
+                }`}>
+                    <span className="font-bold">{obj.english}</span>
+                    <span className="opacity-75 text-[10px] border-l border-white/20 pl-1 ml-1 font-mono">
+                    {Math.round(obj.confidence * 100)}%
+                    </span>
                 </span>
-              </span>
+              )}
             </button>
           ))}
         </div>
       </div>
 
       {/* Result Card */}
-      <div className="absolute bottom-0 w-full p-6 pt-0 z-20">
-        <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 shadow-2xl space-y-5">
+      <div className={`absolute bottom-0 w-full p-6 z-20 transition-transform duration-300 ${isMinimized ? 'translate-y-0' : 'translate-y-0'}`}>
+        <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 pb-24 shadow-2xl space-y-4">
           
-          {/* Object Selection Chips (Alternative selection method) */}
-          {results.length > 1 && (
+          {/* Toggle Minimize Button */}
+          <div className="absolute -top-5 left-1/2 -translate-x-1/2">
+             <button 
+               onClick={() => setIsMinimized(!isMinimized)}
+               className="bg-slate-800 border border-slate-700 text-slate-400 rounded-full p-1.5 shadow-lg hover:text-white"
+             >
+                {isMinimized ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+             </button>
+          </div>
+
+          {!isMinimized && results.length > 1 && (
             <div className="flex overflow-x-auto space-x-2 pb-2 no-scrollbar mask-gradient-r">
               {results.map((obj, idx) => (
                 <button
@@ -126,10 +142,19 @@ const ResultView: React.FC<ResultViewProps> = ({
           )}
 
           <div className="flex flex-col">
-            <h2 className="text-xs text-indigo-400 font-bold tracking-wider uppercase mb-1">
-              Tap objects in image to select
-            </h2>
-            <div className="flex justify-between items-end">
+            <div className="flex justify-between items-center mb-1">
+                <h2 className="text-xs text-indigo-400 font-bold tracking-wider uppercase">
+                  {isMinimized ? currentObject.english : 'Tap objects to select'}
+                </h2>
+                <div className="flex flex-col items-end">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Confidence</span>
+                    <span className="text-sm font-mono text-emerald-400 font-bold">
+                        {Math.round(currentObject.confidence * 100)}%
+                    </span>
+               </div>
+            </div>
+            
+            <div className="flex justify-between items-start">
                <div className="flex-1">
                   <div className="flex items-center space-x-3">
                     <h1 className="text-3xl font-bold text-white capitalize leading-tight">{currentObject.english}</h1>
@@ -143,22 +168,29 @@ const ResultView: React.FC<ResultViewProps> = ({
                   </div>
                   <p className="text-2xl font-thai text-indigo-300 mt-1">{currentObject.thai}</p>
                </div>
-               <div className="flex flex-col items-end">
-                  <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">Confidence</span>
-                  <span className="text-2xl font-mono text-emerald-400 font-bold">
-                    {Math.round(currentObject.confidence * 100)}%
-                  </span>
-               </div>
+               
+               <button 
+                onClick={() => onSave(currentObject)}
+                className={`p-3 rounded-xl transition-all ${
+                    isSaved 
+                    ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/30' 
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
+                }`}
+               >
+                 <BookmarkIcon className="w-6 h-6" filled={isSaved} />
+               </button>
             </div>
           </div>
 
-          <button
-            onClick={onShowSentences}
-            className="w-full bg-white text-slate-900 hover:bg-slate-100 py-3.5 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-[0.98] shadow-lg"
-          >
-            <BookOpenIcon className="w-5 h-5" />
-            <span className="font-thai">ดูตัวอย่างประโยค</span>
-          </button>
+          {!isMinimized && (
+            <button
+                onClick={onShowSentences}
+                className="w-full bg-white text-slate-900 hover:bg-slate-100 py-3.5 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-[0.98] shadow-lg"
+            >
+                <BookOpenIcon className="w-5 h-5" />
+                <span className="font-thai">ดูตัวอย่างประโยค</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
