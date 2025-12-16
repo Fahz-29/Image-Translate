@@ -1,13 +1,25 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { DetectedObject, SentenceExamples } from "../types";
+import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy initialization of Gemini Client
+let aiClient: GoogleGenAI | null = null;
+
+const getAiClient = () => {
+  if (!aiClient) {
+    // If API_KEY is missing, use a placeholder to prevent immediate crash,
+    // the API call will simply fail later with a clear error.
+    const apiKey = process.env.API_KEY || "MISSING_API_KEY";
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+}
 
 const modelName = "gemini-2.5-flash";
 
 export const identifyObjects = async (base64Image: string): Promise<DetectedObject[]> => {
   try {
+    const ai = getAiClient();
+    
     const responseSchema: Schema = {
       type: Type.OBJECT,
       properties: {
@@ -71,6 +83,8 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
 
 export const generateSentences = async (englishName: string, thaiName: string): Promise<SentenceExamples> => {
   try {
+    const ai = getAiClient();
+    
     const responseSchema: Schema = {
       type: Type.OBJECT,
       properties: {
@@ -128,4 +142,93 @@ export const generateSentences = async (englishName: string, thaiName: string): 
     console.error("Error generating sentences:", error);
     throw error;
   }
+};
+
+export const generateGrammarQuiz = async (word: string): Promise<QuizQuestion> => {
+    try {
+        const ai = getAiClient();
+        const responseSchema: Schema = {
+            type: Type.OBJECT,
+            properties: {
+                question: { type: Type.STRING, description: "The sentence with a blank or error" },
+                options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 possible answers" },
+                correctIndex: { type: Type.NUMBER, description: "Index of the correct answer (0-3)" },
+                explanation: { type: Type.STRING, description: "Explanation why the answer is correct" },
+                type: { type: Type.STRING, enum: ['grammar_error', 'fill_blank'] }
+            },
+            required: ["question", "options", "correctIndex", "explanation", "type"]
+        };
+
+        const prompt = `Create a grammar quiz question using the word "${word}". 
+        It can be either a "Fill in the blank" style or "Spot the error" style.
+        The level should be Beginner to Intermediate.
+        Provide 4 options and a clear explanation in Thai/English mixed.`;
+
+        const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response");
+        return JSON.parse(text) as QuizQuestion;
+
+    } catch (error) {
+        console.error("Error generating quiz", error);
+        throw error;
+    }
+};
+
+export const analyzePronunciation = async (audioBase64: string, targetSentence: string): Promise<PronunciationResult> => {
+    try {
+        const ai = getAiClient();
+        const responseSchema: Schema = {
+            type: Type.OBJECT,
+            properties: {
+                score: { type: Type.NUMBER, description: "Score from 0 to 100" },
+                accent: { type: Type.STRING, description: "Identified accent style (e.g. American, British, Thai)" },
+                feedback: { type: Type.STRING, description: "Constructive feedback on pronunciation" },
+                phonemes: { type: Type.STRING, description: "Simple phonetic representation of what was heard" }
+            },
+            required: ["score", "accent", "feedback", "phonemes"]
+        };
+
+        const response = await ai.models.generateContent({
+            model: modelName,
+            contents: {
+                parts: [
+                    {
+                        inlineData: {
+                            mimeType: "audio/webm", // Browser media recorder usually outputs webm/mp4
+                            data: audioBase64
+                        }
+                    },
+                    {
+                        text: `The user is trying to say: "${targetSentence}". 
+                        Listen to the audio. 
+                        1. Rate the pronunciation accuracy (0-100).
+                        2. Identify the accent style (e.g. American, British, Australian, Strong Thai Accent, etc.).
+                        3. Give specific feedback on which words or sounds were unclear.
+                        4. Provide a phonetic breakdown of what you heard.`
+                    }
+                ]
+            },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response");
+        return JSON.parse(text) as PronunciationResult;
+
+    } catch (error) {
+        console.error("Error analyzing audio", error);
+        throw error;
+    }
 };

@@ -2,6 +2,7 @@
   "name": "ThaiSnap Lingo",
   "description": "Learn English by scanning objects around you. Snap a photo to get the Thai and English names, plus example sentences in different tenses.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone"
   ]
 }

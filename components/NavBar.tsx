@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tab } from '../types';
-import { HomeIcon, ListIcon, CardsIcon } from './Icons';
+import { HomeIcon, ListIcon, CardsIcon, PuzzleIcon } from './Icons';
 
 interface NavBarProps {
   currentTab: Tab;
@@ -9,11 +9,11 @@ interface NavBarProps {
 
 const NavBar: React.FC<NavBarProps> = ({ currentTab, onTabChange }) => {
   return (
-    <div className="absolute bottom-0 w-full px-6 py-4 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 z-50">
-      <div className="flex justify-around items-center">
+    <div className="absolute bottom-0 w-full px-4 py-4 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 z-50">
+      <div className="flex justify-between items-center max-w-sm mx-auto">
         <button
           onClick={() => onTabChange(Tab.HOME)}
-          className={`flex flex-col items-center space-y-1 transition-all ${
+          className={`flex flex-col items-center space-y-1 transition-all w-16 ${
             currentTab === Tab.HOME ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
           }`}
         >
@@ -23,7 +23,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentTab, onTabChange }) => {
 
         <button
           onClick={() => onTabChange(Tab.SAVED)}
-          className={`flex flex-col items-center space-y-1 transition-all ${
+          className={`flex flex-col items-center space-y-1 transition-all w-16 ${
             currentTab === Tab.SAVED ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
           }`}
         >
@@ -33,12 +33,22 @@ const NavBar: React.FC<NavBarProps> = ({ currentTab, onTabChange }) => {
 
         <button
           onClick={() => onTabChange(Tab.FLASHCARDS)}
-          className={`flex flex-col items-center space-y-1 transition-all ${
+          className={`flex flex-col items-center space-y-1 transition-all w-16 ${
             currentTab === Tab.FLASHCARDS ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
           }`}
         >
           <CardsIcon className="w-6 h-6" />
-          <span className="text-[10px] font-medium tracking-wide">แฟลชการ์ด</span>
+          <span className="text-[10px] font-medium tracking-wide">การ์ด</span>
+        </button>
+
+        <button
+          onClick={() => onTabChange(Tab.PRACTICE)}
+          className={`flex flex-col items-center space-y-1 transition-all w-16 ${
+            currentTab === Tab.PRACTICE ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <PuzzleIcon className="w-6 h-6" />
+          <span className="text-[10px] font-medium tracking-wide">ฝึกฝน</span>
         </button>
       </div>
     </div>

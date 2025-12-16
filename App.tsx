@@ -5,6 +5,7 @@ import SentencesModal from './components/SentencesModal';
 import NavBar from './components/NavBar';
 import SavedList from './components/SavedList';
 import Flashcards from './components/Flashcards';
+import PracticeHub from './components/PracticeHub';
 import { CameraIcon, SparklesIcon } from './components/Icons';
 import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord } from './types';
 import { identifyObjects, generateSentences } from './services/geminiService';
@@ -178,13 +179,18 @@ const App: React.FC = () => {
       return <Flashcards words={savedWords} />;
     }
 
-    // 3. HOME TAB (Scanning Flow)
-    // 3.1 Camera View
+    // 3. PRACTICE TAB
+    if (currentTab === Tab.PRACTICE) {
+      return <PracticeHub words={savedWords} />;
+    }
+
+    // 4. HOME TAB (Scanning Flow)
+    // 4.1 Camera View
     if (appState === AppState.CAMERA) {
       return <Camera onCapture={handleImageCaptured} onBack={resetApp} />;
     }
 
-    // 3.2 Analyzing
+    // 4.2 Analyzing
     if (appState === AppState.ANALYZING) {
       return (
         <div className="relative h-full w-full bg-slate-900">
@@ -199,7 +205,7 @@ const App: React.FC = () => {
       );
     }
 
-    // 3.3 Result View
+    // 4.3 Result View
     if (appState === AppState.RESULT && capturedImage && scanResults.length > 0) {
       const currentObj = scanResults[selectedObjectIndex];
       const isSaved = isWordSaved(currentObj.english);
@@ -218,7 +224,7 @@ const App: React.FC = () => {
       );
     }
 
-    // 3.4 Sentences Loading
+    // 4.4 Sentences Loading
     if (appState === AppState.SENTENCES_LOADING) {
       return (
          <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center space-y-6">
@@ -237,7 +243,7 @@ const App: React.FC = () => {
       );
     }
 
-    // 3.5 Sentences View
+    // 4.5 Sentences View
     if (appState === AppState.SENTENCES_VIEW && sentences && scanResults.length > 0) {
       const currentObj = scanResults[selectedObjectIndex];
       const isSaved = isWordSaved(currentObj.english);
@@ -253,7 +259,7 @@ const App: React.FC = () => {
       );
     }
 
-    // 3.6 Default Home Screen
+    // 4.6 Default Home Screen
     return (
       <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-900 relative overflow-hidden pb-24">
         {/* Background blobs */}

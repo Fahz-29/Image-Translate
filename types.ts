@@ -31,6 +31,21 @@ export interface Deck {
   createdAt: number;
 }
 
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+  type: 'grammar_error' | 'fill_blank';
+}
+
+export interface PronunciationResult {
+  score: number; // 0-100
+  accent: string; // e.g., "British", "American", "Thai-English"
+  feedback: string;
+  phonemes: string; // IPA or simple phonetic breakdown
+}
+
 export enum AppState {
   HOME = 'HOME',
   CAMERA = 'CAMERA',
@@ -43,5 +58,6 @@ export enum AppState {
 export enum Tab {
   HOME = 'HOME',
   SAVED = 'SAVED',
-  FLASHCARDS = 'FLASHCARDS'
+  FLASHCARDS = 'FLASHCARDS',
+  PRACTICE = 'PRACTICE'
 }
