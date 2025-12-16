@@ -234,10 +234,10 @@ export const analyzePronunciation = async (audioBase64: string, targetSentence: 
         const responseSchema: Schema = {
             type: Type.OBJECT,
             properties: {
-                score: { type: Type.NUMBER, description: "Score from 0 to 100" },
-                accent: { type: Type.STRING, description: "Identified accent style (e.g. American, British, Thai)" },
-                feedback: { type: Type.STRING, description: "Constructive feedback on pronunciation" },
-                phonemes: { type: Type.STRING, description: "Simple phonetic representation of what was heard" }
+                score: { type: Type.NUMBER, description: "Score from 0 to 100. Return 0 if no clear speech is detected." },
+                accent: { type: Type.STRING, description: "Identified accent style, or 'Unknown' if no speech." },
+                feedback: { type: Type.STRING, description: "Constructive feedback on pronunciation." },
+                phonemes: { type: Type.STRING, description: "Simple phonetic representation of what was heard." }
             },
             required: ["score", "accent", "feedback", "phonemes"]
         };
@@ -254,11 +254,13 @@ export const analyzePronunciation = async (audioBase64: string, targetSentence: 
                     },
                     {
                         text: `The user is trying to say: "${targetSentence}". 
-                        Listen to the audio. 
-                        1. Rate the pronunciation accuracy (0-100).
-                        2. Identify the accent style (e.g. American, British, Australian, Strong Thai Accent, etc.).
-                        3. Give specific feedback on which words or sounds were unclear.
-                        4. Provide a phonetic breakdown of what you heard.`
+                        
+                        STRICT INSTRUCTIONS:
+                        1. **Check for Speech**: First, listen if there is actual speech matching the target sentence. If the audio is silent, just background noise, or too short/unintelligible, return a score of 0 and feedback like "ไม่ได้รับเสียงพูด หรือเสียงเบาเกินไป กรุณาลองใหม่อีกครั้ง".
+                        2. **Rate Accuracy**: Only if speech is present, rate the pronunciation accuracy (0-100). Be strict. 
+                        3. **Identify Accent**: Identify the accent style (e.g. American, British, Strong Thai Accent, etc.).
+                        4. **Feedback**: Give specific feedback on which words or sounds were unclear.
+                        5. **Phonetics**: Provide a phonetic breakdown of what you *actually* heard.`
                     }
                 ]
             },

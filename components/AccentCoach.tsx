@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { SavedWord, PronunciationResult } from '../types';
 import { analyzePronunciation } from '../services/geminiService';
-import { ArrowLeftIcon, MicrophoneIcon, SpeakerIcon, GlobeIcon } from './Icons';
+import { ArrowLeftIcon, MicrophoneIcon, SpeakerIcon, GlobeIcon, RefreshIcon } from './Icons';
 
 interface AccentCoachProps {
     words: SavedWord[];
@@ -15,25 +15,81 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [result, setResult] = useState<PronunciationResult | null>(null);
+    const [recordingError, setRecordingError] = useState<string | null>(null);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    
+    // Safety Refs
+    const startTimeRef = useRef<number>(0);
+    const stopRequestedRef = useRef<boolean>(false);
+    const shouldAnalyzeRef = useRef<boolean>(false);
+
+    const getSentencesPool = (word: SavedWord) => {
+        if (word.sentences) {
+            return [
+                word.sentences.past.en,
+                word.sentences.present.en,
+                word.sentences.future.en
+            ];
+        }
+        // Varied fallback templates
+        return [
+            `I see a ${word.english} in the picture.`,
+            `The ${word.english} is very beautiful.`,
+            `Have you ever seen a giant ${word.english}?`,
+            `Please put the ${word.english} on the table.`,
+            `Look at that colorful ${word.english} over there.`,
+            `I really need to find my ${word.english}.`,
+            `Does this ${word.english} belong to you?`
+        ];
+    };
+
+    const pickRandomSentence = (word: SavedWord, current?: string) => {
+        const pool = getSentencesPool(word);
+        let next = pool[Math.floor(Math.random() * pool.length)];
+        
+        // Try to pick a new one if possible
+        if (pool.length > 1 && current && next === current) {
+            const remaining = pool.filter(s => s !== current);
+            if (remaining.length > 0) {
+                 next = remaining[Math.floor(Math.random() * remaining.length)];
+            }
+        }
+        return next;
+    };
 
     const handleSelectWord = (word: SavedWord) => {
         setTargetWord(word);
-        // Prefer present tense sentence if available, otherwise just use the word
-        const sentence = word.sentences?.present.en || `I like the ${word.english}.`;
-        setTargetSentence(sentence);
+        setTargetSentence(pickRandomSentence(word));
         setStep('RECORD');
         setResult(null);
+        setRecordingError(null);
+    };
+
+    const handleShuffleSentence = () => {
+        if (!targetWord) return;
+        setTargetSentence(prev => pickRandomSentence(targetWord, prev));
+        setResult(null); 
     };
 
     const startRecording = async () => {
+        setRecordingError(null);
+        stopRequestedRef.current = false; // Reset stop flag
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            // Check if user already released the button while waiting for permission
+            if (stopRequestedRef.current) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
+            }
+
             const mediaRecorder = new MediaRecorder(stream);
             mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
+            shouldAnalyzeRef.current = false; // Default to false, enable on valid stop
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -42,7 +98,23 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
             };
 
             mediaRecorder.onstop = async () => {
+                // Always clean up tracks
+                stream.getTracks().forEach(track => track.stop());
+
+                // If marked to skip analysis (e.g. too short), return
+                if (!shouldAnalyzeRef.current) {
+                    return;
+                }
+
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                
+                // Double check blob size
+                if (audioBlob.size < 500) {
+                    setRecordingError("เสียงเบาเกินไป");
+                    setIsAnalyzing(false);
+                    return;
+                }
+
                 // Convert to base64
                 const reader = new FileReader();
                 reader.readAsDataURL(audioBlob);
@@ -50,24 +122,33 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
                     const base64String = (reader.result as string).split(',')[1];
                     analyzeAudio(base64String);
                 };
-                
-                // Stop all tracks
-                stream.getTracks().forEach(track => track.stop());
             };
 
             mediaRecorder.start();
+            startTimeRef.current = Date.now();
             setIsRecording(true);
         } catch (err) {
             console.error("Microphone error:", err);
-            alert("ไม่สามารถเข้าถึงไมโครโฟนได้");
+            setRecordingError("ไม่สามารถเข้าถึงไมโครโฟนได้");
         }
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && isRecording) {
-            mediaRecorderRef.current.stop();
+        stopRequestedRef.current = true; // Signal that stop was requested
+
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            const duration = Date.now() - startTimeRef.current;
+            
+            if (duration < 1000) { // Require at least 1 second
+                shouldAnalyzeRef.current = false;
+                setRecordingError("กดค้างไว้นานกว่านี้เพื่อพูด");
+            } else {
+                shouldAnalyzeRef.current = true;
+                setIsAnalyzing(true);
+            }
+            
+            mediaRecorderRef.current.stop(); // This triggers onstop
             setIsRecording(false);
-            setIsAnalyzing(true);
         }
     };
 
@@ -78,7 +159,7 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
             setStep('RESULT');
         } catch (e) {
             console.error(e);
-            alert("เกิดข้อผิดพลาดในการวิเคราะห์");
+            setRecordingError("เกิดข้อผิดพลาดในการวิเคราะห์");
         } finally {
             setIsAnalyzing(false);
         }
@@ -132,7 +213,15 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
 
             <div className="flex-1 flex flex-col items-center">
                 {/* Target Sentence Card */}
-                <div className="w-full bg-gradient-to-br from-indigo-900 to-slate-900 p-6 rounded-3xl border border-indigo-500/30 text-center mb-8 shadow-2xl">
+                <div className="w-full bg-gradient-to-br from-indigo-900 to-slate-900 p-6 rounded-3xl border border-indigo-500/30 text-center mb-8 shadow-2xl relative">
+                    <button 
+                        onClick={handleShuffleSentence}
+                        className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 hover:rotate-180 transition-all duration-500"
+                        title="Change Sentence"
+                    >
+                        <RefreshIcon className="w-4 h-4 text-indigo-200" />
+                    </button>
+
                     <p className="text-sm text-indigo-300 font-bold uppercase mb-2">Read this aloud</p>
                     <h2 className="text-2xl font-bold text-white leading-relaxed">"{targetSentence}"</h2>
                     <button 
@@ -164,7 +253,15 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
                             <MicrophoneIcon className="w-12 h-12 text-white" />
                         </button>
                         
-                        <p className="mt-8 text-sm text-slate-500">{isRecording ? "Recording..." : "Hold to Record"}</p>
+                        <div className="mt-8 text-center min-h-[1.5rem]">
+                            {isRecording ? (
+                                <p className="text-sm text-red-400 animate-pulse font-bold">Recording...</p>
+                            ) : recordingError ? (
+                                <p className="text-sm text-yellow-400 font-thai">{recordingError}</p>
+                            ) : (
+                                <p className="text-sm text-slate-500">Hold to Record</p>
+                            )}
+                        </div>
                     </div>
                 ) : (
                     // RESULT VIEW
@@ -203,7 +300,7 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
                             </div>
 
                             <button 
-                                onClick={() => setStep('RECORD')}
+                                onClick={() => { setRecordingError(null); setStep('RECORD'); }}
                                 className="w-full py-3 bg-white text-slate-900 font-bold rounded-xl shadow-lg mt-4"
                             >
                                 ลองอีกครั้ง
