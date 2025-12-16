@@ -144,7 +144,7 @@ export const generateSentences = async (englishName: string, thaiName: string): 
   }
 };
 
-export const generateGrammarQuiz = async (word: string): Promise<QuizQuestion> => {
+export const generateGrammarQuiz = async (word: string, difficulty: string): Promise<QuizQuestion> => {
     try {
         const ai = getAiClient();
         const responseSchema: Schema = {
@@ -159,9 +159,10 @@ export const generateGrammarQuiz = async (word: string): Promise<QuizQuestion> =
             required: ["question", "options", "correctIndex", "explanation", "type"]
         };
 
-        const prompt = `Create a grammar quiz question using the word "${word}". 
+        const prompt = `Create a multiple-choice grammar quiz question using the word "${word}". 
+        The difficulty level is ${difficulty}.
+        Focus specifically on English grammar rules relevant to this level (e.g. tenses, prepositions, articles, sentence structure).
         It can be either a "Fill in the blank" style or "Spot the error" style.
-        The level should be Beginner to Intermediate.
         Provide 4 options and a clear explanation in Thai/English mixed.`;
 
         const response = await ai.models.generateContent({
@@ -179,6 +180,50 @@ export const generateGrammarQuiz = async (word: string): Promise<QuizQuestion> =
 
     } catch (error) {
         console.error("Error generating quiz", error);
+        throw error;
+    }
+};
+
+export const generateBatchGrammarQuiz = async (words: string[], difficulty: string): Promise<QuizQuestion[]> => {
+    try {
+        const ai = getAiClient();
+        const responseSchema: Schema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    question: { type: Type.STRING, description: "The sentence with a blank or error" },
+                    options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 possible answers" },
+                    correctIndex: { type: Type.NUMBER, description: "Index of the correct answer (0-3)" },
+                    explanation: { type: Type.STRING, description: "Explanation why the answer is correct" },
+                    type: { type: Type.STRING, enum: ['grammar_error', 'fill_blank'] }
+                },
+                required: ["question", "options", "correctIndex", "explanation", "type"]
+            }
+        };
+
+        const prompt = `Create ${words.length} multiple-choice grammar quiz questions.
+        Generate exactly one question for each of these words: ${words.join(', ')}.
+        The difficulty level is ${difficulty}.
+        Focus specifically on English grammar rules relevant to this level (e.g. tenses, prepositions, articles, sentence structure).
+        Mix "Fill in the blank" and "Spot the error" styles.
+        Provide 4 options and a clear explanation in Thai/English mixed for each.`;
+
+        const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response");
+        return JSON.parse(text) as QuizQuestion[];
+
+    } catch (error) {
+        console.error("Error generating batch quiz", error);
         throw error;
     }
 };

@@ -1,67 +1,70 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { SavedWord, QuizQuestion } from '../types';
-import { generateGrammarQuiz } from '../services/geminiService';
-import { ArrowLeftIcon, CheckBadgeIcon, XMarkIcon, SparklesIcon, HomeIcon } from './Icons';
+import { generateBatchGrammarQuiz } from '../services/geminiService';
+import { ArrowLeftIcon, CheckBadgeIcon, XMarkIcon, SparklesIcon, HomeIcon, PlusIcon, MinusIcon } from './Icons';
 
 interface GrammarQuizProps {
     words: SavedWord[];
     onBack: () => void;
 }
 
-const TOTAL_QUESTIONS = 5;
-
 const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
+    // Settings State
+    const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
+    const [targetTotal, setTargetTotal] = useState(5);
+
     // Session State
+    const [questions, setQuestions] = useState<QuizQuestion[]>([]);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [score, setScore] = useState(0);
     const [questionCount, setQuestionCount] = useState(0);
     const [isFinished, setIsFinished] = useState(false);
 
-    // Question State
-    const [isLoading, setIsLoading] = useState(false);
-    const [currentQuestion, setCurrentQuestion] = useState<QuizQuestion | null>(null);
+    // Current Question State
     const [selectedOption, setSelectedOption] = useState<number | null>(null);
     const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-    const [wordUsed, setWordUsed] = useState<string>('');
 
-    const startSession = () => {
+    const startSession = async () => {
+        if (words.length === 0) return;
+
+        setIsLoading(true);
         setScore(0);
         setQuestionCount(0);
         setIsFinished(false);
-        setIsPlaying(true);
-        loadNextQuestion();
-    };
-
-    const loadNextQuestion = async () => {
-        if (words.length === 0) return;
-        
-        // Reset question state
-        setIsLoading(true);
-        setSelectedOption(null);
-        setIsCorrect(null);
-        setCurrentQuestion(null);
-
-        // Pick random word
-        const randomWord = words[Math.floor(Math.random() * words.length)];
-        setWordUsed(randomWord.english);
+        setQuestions([]);
 
         try {
-            const quiz = await generateGrammarQuiz(randomWord.english);
-            setCurrentQuestion(quiz);
+            // Select random words
+            let chosenWords: string[] = [];
+            if (words.length >= targetTotal) {
+                // Shuffle and pick unique
+                const shuffled = [...words].sort(() => 0.5 - Math.random());
+                chosenWords = shuffled.slice(0, targetTotal).map(w => w.english);
+            } else {
+                // Pick random allowing duplicates to fill up
+                for(let i=0; i<targetTotal; i++) {
+                     chosenWords.push(words[Math.floor(Math.random() * words.length)].english);
+                }
+            }
+
+            const quizSet = await generateBatchGrammarQuiz(chosenWords, difficulty);
+            setQuestions(quizSet);
+            setIsPlaying(true);
         } catch (e) {
             console.error(e);
-            alert("ไม่สามารถสร้างคำถามได้ กรุณาลองใหม่");
-            // If error, maybe try again or go back, for now simple alert
+            alert("ไม่สามารถสร้างแบบทดสอบได้ กรุณาลองใหม่");
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleAnswer = (index: number) => {
-        if (selectedOption !== null || !currentQuestion) return;
+        if (selectedOption !== null) return;
+        const currentQ = questions[questionCount];
         setSelectedOption(index);
         
-        const correct = index === currentQuestion.correctIndex;
+        const correct = index === currentQ.correctIndex;
         setIsCorrect(correct);
         if (correct) {
             setScore(prev => prev + 1);
@@ -70,16 +73,45 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
 
     const handleNext = () => {
         const nextCount = questionCount + 1;
-        setQuestionCount(nextCount);
-
-        if (nextCount >= TOTAL_QUESTIONS) {
+        
+        if (nextCount >= questions.length) {
             setIsFinished(true);
         } else {
-            loadNextQuestion();
+            setQuestionCount(nextCount);
+            // Reset for next question
+            setSelectedOption(null);
+            setIsCorrect(null);
         }
     };
 
-    // --- RENDER START SCREEN ---
+    const increaseQuestions = () => {
+        setTargetTotal(prev => Math.min(10, prev + 1));
+    }
+
+    const decreaseQuestions = () => {
+        setTargetTotal(prev => Math.max(5, prev - 1));
+    }
+
+    // --- RENDER LOADING SCREEN ---
+    if (isLoading) {
+        return (
+            <div className="h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center space-y-6 animate-fade-in relative z-50">
+                <div className="relative">
+                   <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20 rounded-full"></div>
+                   <SparklesIcon className="w-16 h-16 text-indigo-400 relative z-10 animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold text-white">Generating Quiz</h3>
+                  <p className="text-slate-400 font-thai">กำลังสร้างโจทย์ {targetTotal} ข้อ...</p>
+                </div>
+                <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden">
+                   <div className="h-full bg-indigo-500 animate-progress"></div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- RENDER START/CONFIG SCREEN ---
     if (!isPlaying && !isFinished) {
         return (
             <div className="h-full w-full bg-slate-900 flex flex-col pt-10 px-6 pb-24 relative overflow-hidden">
@@ -89,20 +121,60 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
                     </button>
                 </div>
 
-                <div className="flex flex-col items-center justify-center flex-1 text-center space-y-6">
+                <div className="flex flex-col items-center justify-center flex-1 text-center space-y-8 animate-fade-in">
                     <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-500/30 rotate-3">
                          <SparklesIcon className="w-12 h-12 text-white" />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                         <h1 className="text-3xl font-bold text-white font-thai">Grammar Challenge</h1>
-                        <p className="text-slate-400 font-thai">ทดสอบความแม่นยำทางไวยากรณ์</p>
+                        <p className="text-slate-400 font-thai text-sm">ทดสอบความแม่นยำทางไวยากรณ์</p>
                     </div>
 
-                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 w-full max-w-xs">
-                         <p className="text-sm text-slate-300 font-thai">
-                             จำนวนข้อ: <span className="font-bold text-white">{TOTAL_QUESTIONS} ข้อ</span><br/>
-                             คำศัพท์ในคลัง: <span className="font-bold text-white">{words.length} คำ</span>
-                         </p>
+                    {/* Settings Area */}
+                    <div className="w-full max-w-sm space-y-6 bg-slate-800/50 p-6 rounded-2xl border border-slate-700/50">
+                        
+                        {/* Difficulty Selector */}
+                        <div className="space-y-3">
+                            <label className="text-xs text-indigo-300 uppercase font-bold tracking-wider">Difficulty Level</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {(['Easy', 'Medium', 'Hard'] as const).map((level) => (
+                                    <button
+                                        key={level}
+                                        onClick={() => setDifficulty(level)}
+                                        className={`py-2 px-1 rounded-lg text-sm font-bold transition-all border ${
+                                            difficulty === level 
+                                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' 
+                                            : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        {level}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Question Count Selector */}
+                        <div className="space-y-3">
+                             <label className="text-xs text-indigo-300 uppercase font-bold tracking-wider">Number of Questions</label>
+                             <div className="flex items-center justify-center gap-6 bg-slate-900/50 p-2 rounded-xl border border-slate-700">
+                                 <button 
+                                    onClick={decreaseQuestions}
+                                    disabled={targetTotal <= 5}
+                                    className="p-2 rounded-lg bg-slate-700 text-white hover:bg-indigo-600 disabled:opacity-30 disabled:hover:bg-slate-700 transition"
+                                 >
+                                     <MinusIcon className="w-5 h-5" />
+                                 </button>
+                                 <span className="text-2xl font-bold text-white w-8 text-center">{targetTotal}</span>
+                                 <button 
+                                    onClick={increaseQuestions}
+                                    disabled={targetTotal >= 10}
+                                    className="p-2 rounded-lg bg-slate-700 text-white hover:bg-indigo-600 disabled:opacity-30 disabled:hover:bg-slate-700 transition"
+                                 >
+                                     <PlusIcon className="w-5 h-5" />
+                                 </button>
+                             </div>
+                        </div>
+
                     </div>
 
                     {words.length < 3 ? (
@@ -112,7 +184,7 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
                     ) : (
                         <button 
                             onClick={startSession}
-                            className="w-full max-w-xs py-3.5 bg-white text-indigo-900 font-bold rounded-xl shadow-xl hover:scale-105 transition-transform font-thai"
+                            className="w-full max-w-xs py-4 bg-white text-indigo-900 font-bold rounded-xl shadow-xl hover:scale-105 transition-transform font-thai"
                         >
                             เริ่มทดสอบ
                         </button>
@@ -135,22 +207,32 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
                 <div className="relative mb-6">
                     <div className="absolute inset-0 bg-purple-500 blur-2xl opacity-20 rounded-full"></div>
                     <div className="relative bg-slate-800 p-8 rounded-full border border-slate-700">
-                        <span className="text-5xl font-bold text-white">{score}/{TOTAL_QUESTIONS}</span>
+                        <span className="text-5xl font-bold text-white">{score}/{targetTotal}</span>
                     </div>
                 </div>
 
                 <h2 className="text-3xl font-bold text-white mb-2 font-thai">สรุปคะแนน</h2>
+                <div className="bg-slate-800/50 px-4 py-2 rounded-lg border border-slate-700 inline-block mb-6">
+                    <span className="text-sm text-indigo-300 uppercase font-bold tracking-wider">{difficulty} Mode</span>
+                </div>
+                
                 <p className="text-slate-400 font-thai mb-10">
-                    {score === TOTAL_QUESTIONS ? "สุดยอด! คุณทำได้เต็มคะแนน" : 
-                     score >= 3 ? "ทำได้ดีมาก! ฝึกฝนต่อไปนะ" : "พยายามอีกนิดนะ!"}
+                    {score === targetTotal ? "สุดยอด! คุณทำได้เต็มคะแนน" : 
+                     score >= Math.floor(targetTotal/2) ? "ทำได้ดีมาก! ฝึกฝนต่อไปนะ" : "พยายามอีกนิดนะ!"}
                 </p>
 
                 <div className="w-full max-w-xs space-y-3">
                     <button 
-                        onClick={startSession}
+                        onClick={() => { 
+                            setIsFinished(false); 
+                            setIsPlaying(false); 
+                            setQuestions([]); 
+                            setSelectedOption(null);
+                            setIsCorrect(null);
+                        }}
                         className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all font-thai"
                     >
-                        เริ่มรอบใหม่
+                        เล่นอีกครั้ง
                     </button>
                     <button 
                         onClick={onBack}
@@ -164,26 +246,23 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
     }
 
     // --- RENDER PLAYING SCREEN ---
+    const currentQuestion = questions[questionCount];
+    
     return (
         <div className="h-full w-full bg-slate-900 flex flex-col pt-6 pb-24 px-6 relative overflow-hidden">
             <div className="flex items-center justify-between mb-6 relative z-10">
-                <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-white">
+                <button onClick={() => { setIsPlaying(false); setQuestions([]); }} className="p-2 -ml-2 text-slate-400 hover:text-white">
                     <ArrowLeftIcon className="w-6 h-6" />
                 </button>
-                <div className="bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
-                    <span className="text-xs font-bold text-indigo-400">Question {questionCount + 1}/{TOTAL_QUESTIONS}</span>
+                <div className="flex flex-col items-end">
+                    <div className="bg-slate-800 px-3 py-1 rounded-full border border-slate-700 mb-1">
+                        <span className="text-xs font-bold text-indigo-400">Question {questionCount + 1}/{questions.length}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">{difficulty}</span>
                 </div>
-                <div className="w-8"></div>
             </div>
 
-            {isLoading && (
-                <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                    <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-slate-400 font-thai animate-pulse">กำลังสร้างโจทย์จากคำว่า "{wordUsed}"...</p>
-                </div>
-            )}
-
-            {!isLoading && currentQuestion && (
+            {currentQuestion && (
                 <div className="flex-1 overflow-y-auto pb-4">
                     {/* Question Card */}
                     <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 mb-6 shadow-xl relative overflow-hidden">
@@ -248,7 +327,7 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
                                 onClick={handleNext}
                                 className="mt-4 w-full py-3 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition font-thai"
                             >
-                                {questionCount === TOTAL_QUESTIONS - 1 ? "ดูผลคะแนน" : "ข้อต่อไป"}
+                                {questionCount === questions.length - 1 ? "ดูผลคะแนน" : "ข้อต่อไป"}
                             </button>
                         </div>
                     )}
