@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SavedWord, Deck } from '../types';
-import { SpeakerIcon, ArrowLeftIcon, SparklesIcon, PlayIcon, XMarkIcon, PlusIcon, TrashIcon, PencilIcon } from './Icons';
+import { SpeakerIcon, ArrowLeftIcon, SparklesIcon, PlayIcon, XMarkIcon, PlusIcon, TrashIcon, PencilIcon, CheckBadgeIcon } from './Icons';
 import { saveDeck, getDecks, deleteDeck, updateDeck } from '../services/storageService';
 
 interface FlashcardsProps {
@@ -23,6 +23,7 @@ const Flashcards: React.FC<FlashcardsProps> = ({ words }) => {
   const [sessionWords, setSessionWords] = useState<SavedWord[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
 
   useEffect(() => {
     setDecks(getDecks());
@@ -75,7 +76,17 @@ const Flashcards: React.FC<FlashcardsProps> = ({ words }) => {
     setCurrentDeck(deck);
     setCurrentIndex(0);
     setIsFlipped(false);
+    setIsFinished(false);
     setView('PLAY_DECK');
+  };
+
+  const restartDeck = () => {
+    if (!currentDeck) return;
+    const shuffled = [...sessionWords].sort(() => Math.random() - 0.5);
+    setSessionWords(shuffled);
+    setCurrentIndex(0);
+    setIsFlipped(false);
+    setIsFinished(false);
   };
 
   const toggleSelection = (id: string) => {
@@ -87,10 +98,19 @@ const Flashcards: React.FC<FlashcardsProps> = ({ words }) => {
 
   const handleNext = () => {
     setIsFlipped(false);
-    // Wait slightly for the flip back to start before changing content
-    setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % sessionWords.length);
-    }, 300);
+    
+    // Check if it was the last card
+    if (currentIndex >= sessionWords.length - 1) {
+        // Delay slightly to allow flip animation reset if needed, but mainly just show finish
+        setTimeout(() => {
+            setIsFinished(true);
+        }, 300);
+    } else {
+        // Wait slightly for the flip back to start before changing content
+        setTimeout(() => {
+            setCurrentIndex((prev) => prev + 1);
+        }, 300);
+    }
   };
 
   const handleSpeak = (text: string, e: React.MouseEvent) => {
@@ -242,6 +262,40 @@ const Flashcards: React.FC<FlashcardsProps> = ({ words }) => {
   }
 
   // 3. PLAY DECK VIEW
+  
+  // 3.1 Completion Screen
+  if (view === 'PLAY_DECK' && isFinished) {
+      return (
+        <div className="h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+             <div className="relative mb-8">
+                 <div className="absolute inset-0 bg-green-500 blur-2xl opacity-20 rounded-full"></div>
+                 <div className="relative bg-slate-800 p-6 rounded-full border border-slate-700">
+                     <CheckBadgeIcon className="w-20 h-20 text-green-400" />
+                 </div>
+             </div>
+             
+             <h2 className="text-3xl font-bold text-white mb-2 font-thai">ยอดเยี่ยม!</h2>
+             <p className="text-slate-400 font-thai mb-10">คุณท่องคำศัพท์ครบ {sessionWords.length} คำแล้ว</p>
+
+             <div className="w-full max-w-xs space-y-3">
+                 <button 
+                    onClick={restartDeck}
+                    className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all font-thai"
+                 >
+                    ทดสอบอีกครั้ง
+                 </button>
+                 <button 
+                    onClick={() => setView('LIST_DECKS')}
+                    className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition-all font-thai"
+                 >
+                    เสร็จสิ้น
+                 </button>
+             </div>
+        </div>
+      );
+  }
+
+  // 3.2 Playing Screen
   const currentWord = sessionWords[currentIndex];
 
   if (view === 'PLAY_DECK' && currentWord) {
@@ -252,7 +306,7 @@ const Flashcards: React.FC<FlashcardsProps> = ({ words }) => {
                     onClick={() => setView('LIST_DECKS')} 
                     className="p-2 rounded-full bg-black/20 text-white/50 hover:bg-black/40 hover:text-white transition"
                 >
-                    <XMarkIcon className="w-6 h-6" />
+                    <ArrowLeftIcon className="w-6 h-6" />
                 </button>
                 <div className="text-center">
                     <h2 className="text-white font-bold font-thai">{currentDeck?.name}</h2>
@@ -334,7 +388,7 @@ const Flashcards: React.FC<FlashcardsProps> = ({ words }) => {
                 onClick={(e) => { e.stopPropagation(); handleNext(); }}
                 className="mt-8 px-10 py-3 bg-white text-slate-900 rounded-full font-bold shadow-lg hover:scale-105 active:scale-95 transition-all font-thai"
             >
-                ถัดไป
+                {currentIndex === sessionWords.length - 1 ? 'เสร็จสิ้น' : 'ถัดไป'}
             </button>
         </div>
     );

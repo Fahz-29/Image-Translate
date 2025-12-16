@@ -1,22 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { SavedWord, QuizQuestion } from '../types';
 import { generateGrammarQuiz } from '../services/geminiService';
-import { ArrowLeftIcon, CheckBadgeIcon, XMarkIcon, SparklesIcon } from './Icons';
+import { ArrowLeftIcon, CheckBadgeIcon, XMarkIcon, SparklesIcon, HomeIcon } from './Icons';
 
 interface GrammarQuizProps {
     words: SavedWord[];
     onBack: () => void;
 }
 
+const TOTAL_QUESTIONS = 5;
+
 const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
+    // Session State
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [score, setScore] = useState(0);
+    const [questionCount, setQuestionCount] = useState(0);
+    const [isFinished, setIsFinished] = useState(false);
+
+    // Question State
     const [isLoading, setIsLoading] = useState(false);
     const [currentQuestion, setCurrentQuestion] = useState<QuizQuestion | null>(null);
     const [selectedOption, setSelectedOption] = useState<number | null>(null);
     const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
     const [wordUsed, setWordUsed] = useState<string>('');
 
-    const startNewQuiz = async () => {
+    const startSession = () => {
+        setScore(0);
+        setQuestionCount(0);
+        setIsFinished(false);
+        setIsPlaying(true);
+        loadNextQuestion();
+    };
+
+    const loadNextQuestion = async () => {
         if (words.length === 0) return;
+        
+        // Reset question state
         setIsLoading(true);
         setSelectedOption(null);
         setIsCorrect(null);
@@ -32,37 +51,129 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
         } catch (e) {
             console.error(e);
             alert("ไม่สามารถสร้างคำถามได้ กรุณาลองใหม่");
+            // If error, maybe try again or go back, for now simple alert
         } finally {
             setIsLoading(false);
         }
     };
 
-    useEffect(() => {
-        startNewQuiz();
-    }, []);
-
     const handleAnswer = (index: number) => {
         if (selectedOption !== null || !currentQuestion) return;
         setSelectedOption(index);
-        setIsCorrect(index === currentQuestion.correctIndex);
+        
+        const correct = index === currentQuestion.correctIndex;
+        setIsCorrect(correct);
+        if (correct) {
+            setScore(prev => prev + 1);
+        }
     };
 
-    if (words.length === 0) {
+    const handleNext = () => {
+        const nextCount = questionCount + 1;
+        setQuestionCount(nextCount);
+
+        if (nextCount >= TOTAL_QUESTIONS) {
+            setIsFinished(true);
+        } else {
+            loadNextQuestion();
+        }
+    };
+
+    // --- RENDER START SCREEN ---
+    if (!isPlaying && !isFinished) {
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 text-center text-slate-400">
-                <p className="font-thai mb-4">คุณต้องบันทึกคำศัพท์ก่อนเพื่อเริ่มเล่นเกม</p>
-                <button onClick={onBack} className="text-indigo-400 font-bold">กลับ</button>
+            <div className="h-full w-full bg-slate-900 flex flex-col pt-10 px-6 pb-24 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full p-6 z-10">
+                     <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-white">
+                        <ArrowLeftIcon className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div className="flex flex-col items-center justify-center flex-1 text-center space-y-6">
+                    <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-500/30 rotate-3">
+                         <SparklesIcon className="w-12 h-12 text-white" />
+                    </div>
+                    <div className="space-y-2">
+                        <h1 className="text-3xl font-bold text-white font-thai">Grammar Challenge</h1>
+                        <p className="text-slate-400 font-thai">ทดสอบความแม่นยำทางไวยากรณ์</p>
+                    </div>
+
+                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 w-full max-w-xs">
+                         <p className="text-sm text-slate-300 font-thai">
+                             จำนวนข้อ: <span className="font-bold text-white">{TOTAL_QUESTIONS} ข้อ</span><br/>
+                             คำศัพท์ในคลัง: <span className="font-bold text-white">{words.length} คำ</span>
+                         </p>
+                    </div>
+
+                    {words.length < 3 ? (
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/50 rounded-xl text-yellow-200 text-sm font-thai">
+                            ⚠️ ควรบันทึกคำศัพท์อย่างน้อย 3 คำก่อนเริ่มเล่น
+                        </div>
+                    ) : (
+                        <button 
+                            onClick={startSession}
+                            className="w-full max-w-xs py-3.5 bg-white text-indigo-900 font-bold rounded-xl shadow-xl hover:scale-105 transition-transform font-thai"
+                        >
+                            เริ่มทดสอบ
+                        </button>
+                    )}
+                </div>
             </div>
         );
     }
 
+    // --- RENDER SUMMARY SCREEN ---
+    if (isFinished) {
+        return (
+            <div className="h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center animate-fade-in relative">
+                <div className="absolute top-0 left-0 w-full p-6 z-10 text-left">
+                     <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-white">
+                        <HomeIcon className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div className="relative mb-6">
+                    <div className="absolute inset-0 bg-purple-500 blur-2xl opacity-20 rounded-full"></div>
+                    <div className="relative bg-slate-800 p-8 rounded-full border border-slate-700">
+                        <span className="text-5xl font-bold text-white">{score}/{TOTAL_QUESTIONS}</span>
+                    </div>
+                </div>
+
+                <h2 className="text-3xl font-bold text-white mb-2 font-thai">สรุปคะแนน</h2>
+                <p className="text-slate-400 font-thai mb-10">
+                    {score === TOTAL_QUESTIONS ? "สุดยอด! คุณทำได้เต็มคะแนน" : 
+                     score >= 3 ? "ทำได้ดีมาก! ฝึกฝนต่อไปนะ" : "พยายามอีกนิดนะ!"}
+                </p>
+
+                <div className="w-full max-w-xs space-y-3">
+                    <button 
+                        onClick={startSession}
+                        className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all font-thai"
+                    >
+                        เริ่มรอบใหม่
+                    </button>
+                    <button 
+                        onClick={onBack}
+                        className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition-all font-thai"
+                    >
+                        กลับหน้าหลัก
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // --- RENDER PLAYING SCREEN ---
     return (
         <div className="h-full w-full bg-slate-900 flex flex-col pt-6 pb-24 px-6 relative overflow-hidden">
-            <div className="flex items-center gap-3 mb-6 relative z-10">
+            <div className="flex items-center justify-between mb-6 relative z-10">
                 <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-white">
                     <ArrowLeftIcon className="w-6 h-6" />
                 </button>
-                <h1 className="text-xl font-bold text-white font-thai">Grammar Challenge</h1>
+                <div className="bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                    <span className="text-xs font-bold text-indigo-400">Question {questionCount + 1}/{TOTAL_QUESTIONS}</span>
+                </div>
+                <div className="w-8"></div>
             </div>
 
             {isLoading && (
@@ -73,7 +184,7 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
             )}
 
             {!isLoading && currentQuestion && (
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto pb-4">
                     {/* Question Card */}
                     <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 mb-6 shadow-xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -134,10 +245,10 @@ const GrammarQuiz: React.FC<GrammarQuizProps> = ({ words, onBack }) => {
                             </p>
                             
                             <button 
-                                onClick={startNewQuiz}
-                                className="mt-4 w-full py-3 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition"
+                                onClick={handleNext}
+                                className="mt-4 w-full py-3 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition font-thai"
                             >
-                                โจทย์ข้อต่อไป
+                                {questionCount === TOTAL_QUESTIONS - 1 ? "ดูผลคะแนน" : "ข้อต่อไป"}
                             </button>
                         </div>
                     )}
