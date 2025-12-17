@@ -21,7 +21,10 @@ const App: React.FC = () => {
   const [scanResults, setScanResults] = useState<DetectedObject[]>([]);
   const [selectedObjectIndex, setSelectedObjectIndex] = useState<number>(0);
   const [sentences, setSentences] = useState<SentenceExamples | null>(null);
-  const [relatedWords, setRelatedWords] = useState<RelatedWord[]>([]);
+  
+  // Cache for related words: Key = English Name, Value = List of words
+  const [relatedWordsCache, setRelatedWordsCache] = useState<Record<string, RelatedWord[]>>({});
+  
   const [error, setError] = useState<string | null>(null);
 
   // File Upload Ref
@@ -86,7 +89,7 @@ const App: React.FC = () => {
       setScanResults(results);
       setSelectedObjectIndex(0); 
       setSentences(null); // Reset sentences from previous scan
-      setRelatedWords([]); // Reset related words
+      setRelatedWordsCache({}); // Reset related words cache for new scan
       setAppState(AppState.RESULT);
     } catch (err) {
       console.error(err);
@@ -115,18 +118,32 @@ const App: React.FC = () => {
   const handleShowRelatedWords = useCallback(async () => {
     if (scanResults.length === 0) return;
     const currentObject = scanResults[selectedObjectIndex];
+    
+    // 1. Check Cache First
+    if (relatedWordsCache[currentObject.english]) {
+        setAppState(AppState.RELATED_VIEW);
+        return;
+    }
+
+    // 2. If not in cache, load from API
     setAppState(AppState.RELATED_LOADING);
 
     try {
         const result = await generateRelatedVocabulary(currentObject.english);
-        setRelatedWords(result);
+        
+        // Save to cache
+        setRelatedWordsCache(prev => ({
+            ...prev,
+            [currentObject.english]: result
+        }));
+        
         setAppState(AppState.RELATED_VIEW);
     } catch (err) {
         console.error(err);
         setError("ไม่สามารถค้นหาศัพท์ใกล้เคียงได้");
         setAppState(AppState.RESULT);
     }
-  }, [scanResults, selectedObjectIndex]);
+  }, [scanResults, selectedObjectIndex, relatedWordsCache]);
 
   const handleSaveObject = (obj: DetectedObject) => {
     // Save current object, pass sentences if they exist in state
@@ -186,7 +203,7 @@ const App: React.FC = () => {
     setScanResults([]);
     setSelectedObjectIndex(0);
     setSentences(null);
-    setRelatedWords([]);
+    setRelatedWordsCache({});
     setError(null);
   };
 
@@ -316,16 +333,18 @@ const App: React.FC = () => {
     // 4.6 Related Words View
     if (appState === AppState.RELATED_VIEW && scanResults.length > 0) {
         const currentObj = scanResults[selectedObjectIndex];
+        const currentRelatedWords = relatedWordsCache[currentObj.english] || [];
+        
         // Map to see if specific related words are saved
         const savedMap: {[key: string]: boolean} = {};
-        relatedWords.forEach(w => {
+        currentRelatedWords.forEach(w => {
             savedMap[w.english.toLowerCase()] = isWordSaved(w.english);
         });
 
         return (
             <RelatedWordsModal
                 originalObject={currentObj}
-                relatedWords={relatedWords}
+                relatedWords={currentRelatedWords}
                 onBack={backToResult}
                 onSaveWord={handleSaveSimpleWord}
                 savedStatus={savedMap}
