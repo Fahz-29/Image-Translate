@@ -8,7 +8,7 @@ import SavedList from './components/SavedList';
 import Flashcards from './components/Flashcards';
 import PracticeHub from './components/PracticeHub';
 import { CameraIcon, SparklesIcon, PhotoIcon } from './components/Icons';
-import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, RelatedWord } from './types';
+import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssociations } from './types';
 import { identifyObjects, generateSentences, generateRelatedVocabulary } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
 
@@ -22,8 +22,9 @@ const App: React.FC = () => {
   const [selectedObjectIndex, setSelectedObjectIndex] = useState<number>(0);
   const [sentences, setSentences] = useState<SentenceExamples | null>(null);
   
-  // Cache for related words: Key = English Name, Value = List of words
-  const [relatedWordsCache, setRelatedWordsCache] = useState<Record<string, RelatedWord[]>>({});
+  // Cache for related words: Key = English Name, Value = Associations
+  const [relatedWordsCache, setRelatedWordsCache] = useState<Record<string, WordAssociations>>({});
+  const [isLoadingAssociations, setIsLoadingAssociations] = useState(false);
   
   const [error, setError] = useState<string | null>(null);
 
@@ -89,7 +90,7 @@ const App: React.FC = () => {
       setScanResults(results);
       setSelectedObjectIndex(0); 
       setSentences(null); // Reset sentences from previous scan
-      setRelatedWordsCache({}); // Reset related words cache for new scan
+      // We don't wipe the cache entirely, we just won't have the new word yet
       setAppState(AppState.RESULT);
     } catch (err) {
       console.error(err);
@@ -115,35 +116,43 @@ const App: React.FC = () => {
     }
   }, [scanResults, selectedObjectIndex]);
 
-  const handleShowRelatedWords = useCallback(async () => {
+  // Fetches associations without changing the full screen view (Inline Loading)
+  const handleLoadAssociationsInline = useCallback(async () => {
     if (scanResults.length === 0) return;
     const currentObject = scanResults[selectedObjectIndex];
-    
-    // 1. Check Cache First
-    if (relatedWordsCache[currentObject.english]) {
-        setAppState(AppState.RELATED_VIEW);
-        return;
-    }
 
-    // 2. If not in cache, load from API
-    setAppState(AppState.RELATED_LOADING);
+    if (relatedWordsCache[currentObject.english]) return;
 
+    setIsLoadingAssociations(true);
     try {
         const result = await generateRelatedVocabulary(currentObject.english);
-        
-        // Save to cache
         setRelatedWordsCache(prev => ({
             ...prev,
             [currentObject.english]: result
         }));
-        
-        setAppState(AppState.RELATED_VIEW);
     } catch (err) {
         console.error(err);
-        setError("ไม่สามารถค้นหาศัพท์ใกล้เคียงได้");
-        setAppState(AppState.RESULT);
+        // We don't verify strict error here for inline elements to avoid blocking UI
+    } finally {
+        setIsLoadingAssociations(false);
     }
   }, [scanResults, selectedObjectIndex, relatedWordsCache]);
+
+  // Auto-trigger association loading when in Result view
+  useEffect(() => {
+    if (appState === AppState.RESULT && scanResults.length > 0) {
+        handleLoadAssociationsInline();
+    }
+  }, [appState, scanResults, selectedObjectIndex, handleLoadAssociationsInline]);
+
+  const handleShowRelatedWords = useCallback(async () => {
+    if (scanResults.length === 0) return;
+    
+    // Use cache directly if available, logic handled in inline loader mostly
+    // But if user clicks before auto-load finishes, we just show loading state in modal
+    setAppState(AppState.RELATED_VIEW);
+    
+  }, [scanResults]);
 
   const handleSaveObject = (obj: DetectedObject) => {
     // Save current object, pass sentences if they exist in state
@@ -203,7 +212,7 @@ const App: React.FC = () => {
     setScanResults([]);
     setSelectedObjectIndex(0);
     setSentences(null);
-    setRelatedWordsCache({});
+    // relatedWordsCache persists
     setError(null);
   };
 
@@ -276,6 +285,7 @@ const App: React.FC = () => {
     if (appState === AppState.RESULT && capturedImage && scanResults.length > 0) {
       const currentObj = scanResults[selectedObjectIndex];
       const isSaved = isWordSaved(currentObj.english);
+      const associations = relatedWordsCache[currentObj.english];
       
       return (
         <ResultView 
@@ -288,14 +298,17 @@ const App: React.FC = () => {
           onShowRelated={handleShowRelatedWords}
           onSave={handleSaveObject}
           isSaved={isSaved}
+          associations={associations}
+          onLoadAssociations={handleLoadAssociationsInline}
+          isLoadingAssociations={isLoadingAssociations}
         />
       );
     }
 
     // 4.4 Loading States (Sentences or Related)
     if (appState === AppState.SENTENCES_LOADING || appState === AppState.RELATED_LOADING) {
-        const text = appState === AppState.SENTENCES_LOADING ? "กำลังแต่งประโยคตัวอย่าง..." : "กำลังค้นหาศัพท์ใกล้เคียง...";
-        const title = appState === AppState.SENTENCES_LOADING ? "Generating Sentences" : "Finding Related Words";
+        const text = appState === AppState.SENTENCES_LOADING ? "กำลังแต่งประโยคตัวอย่าง..." : "กำลังคัดสรรคำศัพท์...";
+        const title = appState === AppState.SENTENCES_LOADING ? "Generating Sentences" : "Curating Vocabulary";
         
       return (
          <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center space-y-6">
@@ -333,18 +346,30 @@ const App: React.FC = () => {
     // 4.6 Related Words View
     if (appState === AppState.RELATED_VIEW && scanResults.length > 0) {
         const currentObj = scanResults[selectedObjectIndex];
-        const currentRelatedWords = relatedWordsCache[currentObj.english] || [];
+        const associations = relatedWordsCache[currentObj.english];
         
-        // Map to see if specific related words are saved
+        // If not loaded yet (should be rare due to auto-load), show loading skeleton or similar
+        // But for safety, check if associations exist
+        if (!associations) {
+            // Fallback: If for some reason auto-load failed or is slow, we trigger it again or show loader
+            // For now, let's just return null and wait for the useEffect to kick in or complete
+            return (
+                 <div className="h-full w-full bg-slate-900 flex items-center justify-center">
+                    <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                 </div>
+            );
+        }
+
+        // Collect only related nouns for this view (verbs are now in ResultView)
         const savedMap: {[key: string]: boolean} = {};
-        currentRelatedWords.forEach(w => {
+        associations.relatedWords.forEach(w => {
             savedMap[w.english.toLowerCase()] = isWordSaved(w.english);
         });
 
         return (
             <RelatedWordsModal
                 originalObject={currentObj}
-                relatedWords={currentRelatedWords}
+                associations={associations}
                 onBack={backToResult}
                 onSaveWord={handleSaveSimpleWord}
                 savedStatus={savedMap}

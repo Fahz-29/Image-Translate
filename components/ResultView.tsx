@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { DetectedObject } from '../types';
-import { BookOpenIcon, XMarkIcon, SpeakerIcon, BookmarkIcon, ChevronDownIcon, ChevronUpIcon, PuzzleIcon } from './Icons';
+import { DetectedObject, WordAssociations } from '../types';
+import { BookOpenIcon, XMarkIcon, SpeakerIcon, BookmarkIcon, ChevronDownIcon, ChevronUpIcon, PuzzleIcon, SparklesIcon } from './Icons';
 
 interface ResultViewProps {
   imageSrc: string;
@@ -12,6 +12,9 @@ interface ResultViewProps {
   onShowRelated: () => void;
   onSave: (obj: DetectedObject) => void;
   isSaved: boolean;
+  associations?: WordAssociations; // Optional: May not be loaded yet
+  onLoadAssociations: () => void;
+  isLoadingAssociations: boolean;
 }
 
 const ResultView: React.FC<ResultViewProps> = ({ 
@@ -23,7 +26,10 @@ const ResultView: React.FC<ResultViewProps> = ({
   onShowSentences,
   onShowRelated,
   onSave,
-  isSaved
+  isSaved,
+  associations,
+  onLoadAssociations,
+  isLoadingAssociations
 }) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const currentObject = results[selectedIndex];
@@ -169,6 +175,38 @@ const ResultView: React.FC<ResultViewProps> = ({
                     </button>
                   </div>
                   <p className="text-2xl font-thai text-indigo-300 mt-1">{currentObject.thai}</p>
+                  
+                  {/* --- NEW SECTION: Associated Verbs (Auto-Loaded) --- */}
+                  <div className="mt-4 min-h-[32px] flex items-center">
+                     {associations ? (
+                        <div className="flex flex-wrap gap-2 animate-fade-in">
+                            <span className="text-[10px] text-emerald-400 font-bold tracking-wide flex items-center mr-1 h-6 font-thai">
+                                คำกริยาที่ใช้บ่อย (Verbs)
+                            </span>
+                            {associations.associatedVerbs.map((verb, i) => (
+                                <button
+                                    key={i}
+                                    onClick={(e) => handleSpeak(verb.english, e)}
+                                    className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 text-sm font-medium hover:bg-emerald-500/20 transition-colors flex items-center gap-1 group"
+                                >
+                                    <span>{verb.english}</span>
+                                    <span className="text-[10px] opacity-60 font-thai group-hover:opacity-100 transition-opacity">({verb.thai})</span>
+                                </button>
+                            ))}
+                        </div>
+                     ) : isLoadingAssociations ? (
+                        <div className="flex items-center gap-2">
+                             <div className="flex space-x-1">
+                                <div className="w-1.5 h-1.5 bg-emerald-500/50 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                <div className="w-1.5 h-1.5 bg-emerald-500/50 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                <div className="w-1.5 h-1.5 bg-emerald-500/50 rounded-full animate-bounce"></div>
+                             </div>
+                             <span className="text-xs text-slate-500 font-thai">กำลังหาคำกริยาที่ใช้คู่กัน...</span>
+                        </div>
+                     ) : null}
+                  </div>
+                  {/* ------------------------------------------- */}
+
                </div>
                
                <button 

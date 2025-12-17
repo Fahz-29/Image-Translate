@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult, RelatedWord } from "../types";
+import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult, WordAssociations } from "../types";
 
 // Lazy initialization of Gemini Client
 let aiClient: GoogleGenAI | null = null;
@@ -144,25 +144,49 @@ export const generateSentences = async (englishName: string, thaiName: string): 
   }
 };
 
-export const generateRelatedVocabulary = async (word: string): Promise<RelatedWord[]> => {
+export const generateRelatedVocabulary = async (word: string): Promise<WordAssociations> => {
     try {
         const ai = getAiClient();
         const responseSchema: Schema = {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    english: { type: Type.STRING },
-                    thai: { type: Type.STRING },
-                    type: { type: Type.STRING, description: "Relationship type e.g. Synonym, Specific Type, Part of, etc." },
-                    definition: { type: Type.STRING, description: "Very short definition or context in Thai" }
+            type: Type.OBJECT,
+            properties: {
+                relatedWords: {
+                    type: Type.ARRAY,
+                    description: "5 related nouns, synonyms, or types of objects",
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            english: { type: Type.STRING },
+                            thai: { type: Type.STRING },
+                            type: { type: Type.STRING, description: "e.g. Synonym, Type of, Component" },
+                            definition: { type: Type.STRING, description: "Very short definition in Thai" }
+                        },
+                        required: ["english", "thai", "type", "definition"]
+                    }
                 },
-                required: ["english", "thai", "type", "definition"]
-            }
+                associatedVerbs: {
+                    type: Type.ARRAY,
+                    description: "3 common verbs/actions done WITH this object",
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            english: { type: Type.STRING },
+                            thai: { type: Type.STRING },
+                            type: { type: Type.STRING, description: "Always 'Verb' or 'Action'" },
+                            definition: { type: Type.STRING, description: "Context of how this verb is used with the object in Thai" }
+                        },
+                        required: ["english", "thai", "type", "definition"]
+                    }
+                }
+            },
+            required: ["relatedWords", "associatedVerbs"]
         };
 
-        const prompt = `Generate 5 related English vocabulary words for "${word}".
-        Include synonyms, specific types (e.g. if cup -> mug, goblet), or closely associated items.
+        const prompt = `Generate vocabulary associations for the object "${word}".
+        
+        1. "relatedWords": Generate 5 related English nouns, synonyms, or specific types (e.g. if cup -> mug, goblet).
+        2. "associatedVerbs": Generate exactly 3 common English verbs that are frequently used with "${word}" (collocations). e.g. if cup -> drink, hold, spill.
+        
         Provide Thai translations and a very short definition/context in Thai for each.`;
 
         const response = await ai.models.generateContent({
@@ -176,7 +200,7 @@ export const generateRelatedVocabulary = async (word: string): Promise<RelatedWo
 
         const text = response.text;
         if (!text) throw new Error("No response");
-        return JSON.parse(text) as RelatedWord[];
+        return JSON.parse(text) as WordAssociations;
     } catch (error) {
         console.error("Error generating related words", error);
         throw error;

@@ -19,8 +19,13 @@ export interface SentenceExamples {
 export interface RelatedWord {
   english: string;
   thai: string;
-  type: string; // e.g., "Synonym", "Type of", "Related Object"
+  type: string; // e.g., "Synonym", "Verb", "Type of"
   definition: string; // Short explanation in Thai
+}
+
+export interface WordAssociations {
+  relatedWords: RelatedWord[]; // Synonyms, types, nouns
+  associatedVerbs: RelatedWord[]; // Verbs specifically used with the object
 }
 
 export interface SavedWord {
