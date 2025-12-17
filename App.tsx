@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Camera from './components/Camera';
 import ResultView from './components/ResultView';
 import SentencesModal from './components/SentencesModal';
@@ -6,7 +6,7 @@ import NavBar from './components/NavBar';
 import SavedList from './components/SavedList';
 import Flashcards from './components/Flashcards';
 import PracticeHub from './components/PracticeHub';
-import { CameraIcon, SparklesIcon } from './components/Icons';
+import { CameraIcon, SparklesIcon, PhotoIcon } from './components/Icons';
 import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord } from './types';
 import { identifyObjects, generateSentences } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
@@ -21,6 +21,9 @@ const App: React.FC = () => {
   const [selectedObjectIndex, setSelectedObjectIndex] = useState<number>(0);
   const [sentences, setSentences] = useState<SentenceExamples | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // File Upload Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Saved Data State
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
@@ -43,6 +46,28 @@ const App: React.FC = () => {
   const startScanning = () => {
     setAppState(AppState.CAMERA);
     setError(null);
+  };
+
+  // Trigger the hidden file input
+  const triggerFileUpload = () => {
+    setError(null);
+    fileInputRef.current?.click();
+  };
+
+  // Handle file selection from gallery
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset input so valid change is detected if same file is selected again
+    event.target.value = '';
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      handleImageCaptured(base64);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleImageCaptured = useCallback(async (imageSrc: string) => {
@@ -286,13 +311,34 @@ const App: React.FC = () => {
              </div>
           )}
 
-          <button
-            onClick={startScanning}
-            className="group relative w-full max-w-xs flex items-center justify-center space-x-3 bg-white text-slate-900 py-4 px-8 rounded-full font-bold text-lg shadow-lg hover:shadow-indigo-500/20 hover:scale-105 transition-all duration-300"
-          >
-            <CameraIcon className="w-6 h-6 text-indigo-600 group-hover:rotate-12 transition-transform" />
-            <span className="font-thai">สแกนคำศัพท์</span>
-          </button>
+          <div className="flex items-center gap-4 w-full max-w-xs">
+            {/* Hidden File Input */}
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*" 
+                onChange={handleFileUpload}
+            />
+
+            {/* Main Scan Button */}
+            <button
+                onClick={startScanning}
+                className="group flex-1 flex items-center justify-center space-x-2 bg-white text-slate-900 py-4 px-6 rounded-full font-bold text-lg shadow-lg hover:shadow-indigo-500/20 hover:scale-105 transition-all duration-300"
+            >
+                <CameraIcon className="w-6 h-6 text-indigo-600 group-hover:rotate-12 transition-transform" />
+                <span className="font-thai">สแกนเลย</span>
+            </button>
+
+            {/* Upload Button */}
+            <button
+                onClick={triggerFileUpload}
+                className="bg-slate-800 text-slate-300 hover:text-white p-4 rounded-full border border-slate-700 hover:bg-slate-700 hover:border-indigo-500 transition-all shadow-lg active:scale-95"
+                title="เลือกจากแกลเลอรี"
+            >
+                <PhotoIcon className="w-6 h-6" />
+            </button>
+          </div>
         </div>
       </div>
     );
