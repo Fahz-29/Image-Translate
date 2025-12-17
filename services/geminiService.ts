@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult } from "../types";
+import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult, RelatedWord } from "../types";
 
 // Lazy initialization of Gemini Client
 let aiClient: GoogleGenAI | null = null;
@@ -142,6 +142,45 @@ export const generateSentences = async (englishName: string, thaiName: string): 
     console.error("Error generating sentences:", error);
     throw error;
   }
+};
+
+export const generateRelatedVocabulary = async (word: string): Promise<RelatedWord[]> => {
+    try {
+        const ai = getAiClient();
+        const responseSchema: Schema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    english: { type: Type.STRING },
+                    thai: { type: Type.STRING },
+                    type: { type: Type.STRING, description: "Relationship type e.g. Synonym, Specific Type, Part of, etc." },
+                    definition: { type: Type.STRING, description: "Very short definition or context in Thai" }
+                },
+                required: ["english", "thai", "type", "definition"]
+            }
+        };
+
+        const prompt = `Generate 5 related English vocabulary words for "${word}".
+        Include synonyms, specific types (e.g. if cup -> mug, goblet), or closely associated items.
+        Provide Thai translations and a very short definition/context in Thai for each.`;
+
+        const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response");
+        return JSON.parse(text) as RelatedWord[];
+    } catch (error) {
+        console.error("Error generating related words", error);
+        throw error;
+    }
 };
 
 export const generateGrammarQuiz = async (word: string, difficulty: string): Promise<QuizQuestion> => {

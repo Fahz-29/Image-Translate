@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DetectedObject } from '../types';
-import { BookOpenIcon, XMarkIcon, SpeakerIcon, BookmarkIcon, ChevronDownIcon, ChevronUpIcon } from './Icons';
+import { BookOpenIcon, XMarkIcon, SpeakerIcon, BookmarkIcon, ChevronDownIcon, ChevronUpIcon, PuzzleIcon } from './Icons';
 
 interface ResultViewProps {
   imageSrc: string;
@@ -9,6 +9,7 @@ interface ResultViewProps {
   onSelect: (index: number) => void;
   onClose: () => void;
   onShowSentences: () => void;
+  onShowRelated: () => void;
   onSave: (obj: DetectedObject) => void;
   isSaved: boolean;
 }
@@ -20,6 +21,7 @@ const ResultView: React.FC<ResultViewProps> = ({
   onSelect,
   onClose, 
   onShowSentences,
+  onShowRelated,
   onSave,
   isSaved
 }) => {
@@ -183,13 +185,22 @@ const ResultView: React.FC<ResultViewProps> = ({
           </div>
 
           {!isMinimized && (
-            <button
-                onClick={onShowSentences}
-                className="w-full bg-white text-slate-900 hover:bg-slate-100 py-3.5 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-[0.98] shadow-lg"
-            >
-                <BookOpenIcon className="w-5 h-5" />
-                <span className="font-thai">ดูตัวอย่างประโยค</span>
-            </button>
+            <div className="flex gap-2">
+                <button
+                    onClick={onShowSentences}
+                    className="flex-1 bg-white text-slate-900 hover:bg-slate-100 py-3.5 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-[0.98] shadow-lg"
+                >
+                    <BookOpenIcon className="w-5 h-5" />
+                    <span className="font-thai">ตัวอย่างประโยค</span>
+                </button>
+                <button
+                    onClick={onShowRelated}
+                    className="flex-1 bg-slate-700 text-white hover:bg-slate-600 border border-slate-600 py-3.5 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-[0.98] shadow-lg"
+                >
+                    <PuzzleIcon className="w-5 h-5 text-indigo-300" />
+                    <span className="font-thai">ศัพท์ใกล้เคียง</span>
+                </button>
+            </div>
           )}
         </div>
       </div>

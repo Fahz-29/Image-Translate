@@ -16,6 +16,13 @@ export interface SentenceExamples {
   future: SentencePair;
 }
 
+export interface RelatedWord {
+  english: string;
+  thai: string;
+  type: string; // e.g., "Synonym", "Type of", "Related Object"
+  definition: string; // Short explanation in Thai
+}
+
 export interface SavedWord {
   id: string;
   thai: string;
@@ -52,7 +59,9 @@ export enum AppState {
   ANALYZING = 'ANALYZING',
   RESULT = 'RESULT',
   SENTENCES_LOADING = 'SENTENCES_LOADING',
-  SENTENCES_VIEW = 'SENTENCES_VIEW'
+  SENTENCES_VIEW = 'SENTENCES_VIEW',
+  RELATED_LOADING = 'RELATED_LOADING',
+  RELATED_VIEW = 'RELATED_VIEW'
 }
 
 export enum Tab {

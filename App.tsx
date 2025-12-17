@@ -2,13 +2,14 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Camera from './components/Camera';
 import ResultView from './components/ResultView';
 import SentencesModal from './components/SentencesModal';
+import RelatedWordsModal from './components/RelatedWordsModal';
 import NavBar from './components/NavBar';
 import SavedList from './components/SavedList';
 import Flashcards from './components/Flashcards';
 import PracticeHub from './components/PracticeHub';
 import { CameraIcon, SparklesIcon, PhotoIcon } from './components/Icons';
-import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord } from './types';
-import { identifyObjects, generateSentences } from './services/geminiService';
+import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, RelatedWord } from './types';
+import { identifyObjects, generateSentences, generateRelatedVocabulary } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
 
 const App: React.FC = () => {
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [scanResults, setScanResults] = useState<DetectedObject[]>([]);
   const [selectedObjectIndex, setSelectedObjectIndex] = useState<number>(0);
   const [sentences, setSentences] = useState<SentenceExamples | null>(null);
+  const [relatedWords, setRelatedWords] = useState<RelatedWord[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // File Upload Ref
@@ -84,6 +86,7 @@ const App: React.FC = () => {
       setScanResults(results);
       setSelectedObjectIndex(0); 
       setSentences(null); // Reset sentences from previous scan
+      setRelatedWords([]); // Reset related words
       setAppState(AppState.RESULT);
     } catch (err) {
       console.error(err);
@@ -109,6 +112,22 @@ const App: React.FC = () => {
     }
   }, [scanResults, selectedObjectIndex]);
 
+  const handleShowRelatedWords = useCallback(async () => {
+    if (scanResults.length === 0) return;
+    const currentObject = scanResults[selectedObjectIndex];
+    setAppState(AppState.RELATED_LOADING);
+
+    try {
+        const result = await generateRelatedVocabulary(currentObject.english);
+        setRelatedWords(result);
+        setAppState(AppState.RELATED_VIEW);
+    } catch (err) {
+        console.error(err);
+        setError("ไม่สามารถค้นหาศัพท์ใกล้เคียงได้");
+        setAppState(AppState.RESULT);
+    }
+  }, [scanResults, selectedObjectIndex]);
+
   const handleSaveObject = (obj: DetectedObject) => {
     // Save current object, pass sentences if they exist in state
     saveWord(obj.english, obj.thai, sentences || undefined);
@@ -122,6 +141,11 @@ const App: React.FC = () => {
        saveWord(currentObject.english, currentObject.thai, sentences);
        setSavedWords(getSavedWords());
     }
+  };
+  
+  const handleSaveSimpleWord = (en: string, th: string) => {
+      saveWord(en, th);
+      setSavedWords(getSavedWords());
   };
 
   const handleDeleteWord = (id: string) => {
@@ -162,6 +186,7 @@ const App: React.FC = () => {
     setScanResults([]);
     setSelectedObjectIndex(0);
     setSentences(null);
+    setRelatedWords([]);
     setError(null);
   };
 
@@ -243,14 +268,18 @@ const App: React.FC = () => {
           onSelect={setSelectedObjectIndex}
           onClose={resetApp} 
           onShowSentences={handleShowSentences}
+          onShowRelated={handleShowRelatedWords}
           onSave={handleSaveObject}
           isSaved={isSaved}
         />
       );
     }
 
-    // 4.4 Sentences Loading
-    if (appState === AppState.SENTENCES_LOADING) {
+    // 4.4 Loading States (Sentences or Related)
+    if (appState === AppState.SENTENCES_LOADING || appState === AppState.RELATED_LOADING) {
+        const text = appState === AppState.SENTENCES_LOADING ? "กำลังแต่งประโยคตัวอย่าง..." : "กำลังค้นหาศัพท์ใกล้เคียง...";
+        const title = appState === AppState.SENTENCES_LOADING ? "Generating Sentences" : "Finding Related Words";
+        
       return (
          <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center space-y-6">
             <div className="relative">
@@ -258,8 +287,8 @@ const App: React.FC = () => {
                <SparklesIcon className="w-16 h-16 text-indigo-400 relative z-10 animate-pulse" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-xl font-semibold text-white">Generating Sentences</h3>
-              <p className="text-slate-400 font-thai">กำลังแต่งประโยคตัวอย่าง...</p>
+              <h3 className="text-xl font-semibold text-white">{title}</h3>
+              <p className="text-slate-400 font-thai">{text}</p>
             </div>
             <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden">
                <div className="h-full bg-indigo-500 animate-progress"></div>
@@ -284,7 +313,27 @@ const App: React.FC = () => {
       );
     }
 
-    // 4.6 Default Home Screen
+    // 4.6 Related Words View
+    if (appState === AppState.RELATED_VIEW && scanResults.length > 0) {
+        const currentObj = scanResults[selectedObjectIndex];
+        // Map to see if specific related words are saved
+        const savedMap: {[key: string]: boolean} = {};
+        relatedWords.forEach(w => {
+            savedMap[w.english.toLowerCase()] = isWordSaved(w.english);
+        });
+
+        return (
+            <RelatedWordsModal
+                originalObject={currentObj}
+                relatedWords={relatedWords}
+                onBack={backToResult}
+                onSaveWord={handleSaveSimpleWord}
+                savedStatus={savedMap}
+            />
+        );
+    }
+
+    // 4.7 Default Home Screen
     return (
       <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-900 relative overflow-hidden pb-24">
         {/* Background blobs */}
@@ -349,7 +398,7 @@ const App: React.FC = () => {
       {renderContent()}
       
       {/* Hide NavBar if in Camera mode or full screen modals to avoid clutter */}
-      {appState !== AppState.CAMERA && appState !== AppState.SENTENCES_VIEW && !viewingSavedWord && (
+      {appState !== AppState.CAMERA && appState !== AppState.SENTENCES_VIEW && appState !== AppState.RELATED_VIEW && !viewingSavedWord && (
         <NavBar currentTab={currentTab} onTabChange={handleTabChange} />
       )}
     </div>
