@@ -50,7 +50,7 @@ export const saveWord = async (
       .ilike('english', english)
       .maybeSingle();
 
-    // 2. เตรียมข้อมูล
+    // 2. เตรียมข้อมูล (ปรับชื่อคอลัมน์ให้ตรงกับ SQL)
     const payload: any = {
       english: english.toLowerCase(),
       thai,
@@ -90,12 +90,12 @@ export const saveWord = async (
     const errorMsg = err.message || "Unknown error";
     console.error("❌ Supabase Save Failure:", errorMsg);
     
-    // แจ้งเตือนสาเหตุที่เจอบ่อย
-    if (errorMsg.includes('column "image_urls" does not exist')) {
-        return { data: null, error: "Database Error: กรุณารัน SQL เพิ่มคอลัมน์ image_urls ใน Supabase" };
-    }
-    if (errorMsg.includes('FetchError') || errorMsg.includes('Failed to fetch')) {
-        return { data: null, error: "Network Error: ไม่สามารถเชื่อมต่อกับ Supabase ได้ (ตรวจสอบ URL/Key ใน Vercel)" };
+    // ดักจับกรณีคอลัมน์ image_urls หายไป
+    if (errorMsg.includes('column "image_urls"') || errorMsg.includes('image_urls')) {
+        return { 
+            data: null, 
+            error: "DATABASE_SCHEMA_ERROR: ตาราง 'words' ขาดคอลัมน์ 'image_urls' กรุณารัน SQL 'ALTER TABLE words ADD COLUMN image_urls TEXT[];' ใน Supabase SQL Editor" 
+        };
     }
     
     return { data: null, error: `Supabase Error: ${errorMsg}` };

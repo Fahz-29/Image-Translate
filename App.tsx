@@ -92,7 +92,6 @@ const App: React.FC = () => {
     } else {
       setErrorMessage(err.message || "เกิดข้อผิดพลาด");
     }
-    // Don't auto-reset state if we are showing a save error
     if (appState === AppState.ANALYZING) setAppState(AppState.HOME);
     setIsTranslating(false);
   };
@@ -307,17 +306,29 @@ const App: React.FC = () => {
 
         {errorMessage && (
           <div className="absolute top-10 left-6 right-6 z-50">
-             <div className="bg-red-500 text-white p-4 rounded-2xl shadow-2xl flex flex-col items-center text-center space-y-3">
-                <div className="flex w-full items-center justify-between">
-                   <p className="text-sm font-bold font-thai">{errorMessage}</p>
-                   <button onClick={() => setErrorMessage(null)} className="p-1 hover:bg-white/10 rounded-full"><XMarkIcon className="w-4 h-4" /></button>
+             <div className="bg-red-500 text-white p-5 rounded-3xl shadow-2xl flex flex-col items-center text-center space-y-4 border-2 border-white/20">
+                <div className="flex w-full items-start justify-between">
+                   <div className="text-left">
+                      <p className="text-sm font-black font-thai">ตรวจพบข้อผิดพลาด:</p>
+                      <p className="text-[11px] font-thai leading-relaxed opacity-90 mt-1">{errorMessage}</p>
+                   </div>
+                   <button onClick={() => setErrorMessage(null)} className="p-1 hover:bg-white/10 rounded-full flex-shrink-0"><XMarkIcon className="w-5 h-5" /></button>
                 </div>
+                
+                {errorMessage.includes('DATABASE_SCHEMA_ERROR') && (
+                  <div className="bg-black/20 p-3 rounded-2xl w-full text-left space-y-2">
+                     <p className="text-[10px] font-black uppercase tracking-widest text-white/70">วิธีแก้ไขด่วน:</p>
+                     <p className="text-[11px] font-thai">1. ไปที่ Supabase > SQL Editor</p>
+                     <p className="text-[11px] font-thai">2. รันคำสั่ง: <code className="bg-black/40 px-1 py-0.5 rounded">ALTER TABLE words ADD COLUMN image_urls TEXT[];</code></p>
+                  </div>
+                )}
+
                 {isQuotaError && (
                   <button 
                     onClick={handleSelectPersonalKey}
-                    className="bg-white text-red-600 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg font-thai"
+                    className="w-full bg-white text-red-600 px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg font-thai"
                   >
-                     คลิกเพื่อใช้ API Key ของตัวเอง
+                     คลิกเพื่อใช้ API Key ส่วนตัว
                   </button>
                 )}
              </div>
