@@ -1,8 +1,10 @@
+
 export interface DetectedObject {
   thai: string;
   english: string;
   box_2d: number[]; // [ymin, xmin, ymax, xmax]
   confidence: number; // 0 to 1
+  imageUrls?: string[]; // Multiple images from web search
 }
 
 export interface SentencePair {
@@ -11,9 +13,9 @@ export interface SentencePair {
 }
 
 export interface SentenceExamples {
-  past: SentencePair;
-  present: SentencePair;
-  future: SentencePair;
+  scenario1: SentencePair; // e.g., Casual
+  scenario2: SentencePair; // e.g., Formal
+  scenario3: SentencePair; // e.g., Question/Answer
 }
 
 export interface RelatedWord {
@@ -33,6 +35,8 @@ export interface SavedWord {
   thai: string;
   english: string;
   sentences?: SentenceExamples;
+  imageUrls?: string[];
+  associations?: WordAssociations;
   timestamp: number;
 }
 

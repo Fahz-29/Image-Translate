@@ -1,4 +1,5 @@
-import { SavedWord, SentenceExamples, Deck, PronunciationResult } from '../types';
+
+import { SavedWord, SentenceExamples, Deck, PronunciationResult, WordAssociations } from '../types';
 import { supabase } from './supabaseClient';
 
 // --- WORDS ---
@@ -15,11 +16,18 @@ export const getSavedWords = async (): Promise<SavedWord[]> => {
   }
   return data.map(w => ({
       ...w,
+      imageUrls: w.image_urls, // Map from DB Snake Case
       timestamp: new Date(w.timestamp).getTime()
   }));
 };
 
-export const saveWord = async (english: string, thai: string, sentences?: SentenceExamples, associations?: any): Promise<SavedWord | null> => {
+export const saveWord = async (
+  english: string, 
+  thai: string, 
+  sentences?: SentenceExamples, 
+  associations?: WordAssociations,
+  imageUrls?: string[]
+): Promise<SavedWord | null> => {
   const { data: existing } = await supabase
     .from('words')
     .select('*')
@@ -31,6 +39,7 @@ export const saveWord = async (english: string, thai: string, sentences?: Senten
     thai,
     sentences: sentences || (existing ? existing.sentences : null),
     associations: associations || (existing ? existing.associations : null),
+    image_urls: imageUrls || (existing ? existing.image_urls : null),
     timestamp: new Date().toISOString()
   };
 
@@ -42,7 +51,7 @@ export const saveWord = async (english: string, thai: string, sentences?: Senten
       .select()
       .single();
     if (error) return null;
-    return data;
+    return { ...data, imageUrls: data.image_urls };
   } else {
     const { data, error } = await supabase
       .from('words')
@@ -50,7 +59,7 @@ export const saveWord = async (english: string, thai: string, sentences?: Senten
       .select()
       .single();
     if (error) return null;
-    return data;
+    return { ...data, imageUrls: data.image_urls };
   }
 };
 
@@ -73,7 +82,7 @@ export const isWordSaved = async (english: string): Promise<boolean> => {
     return !!data;
 };
 
-// --- DECKS ---
+// --- DECKS & HISTORY (Existing logic unchanged) ---
 
 export const getDecks = async (): Promise<Deck[]> => {
   const { data, error } = await supabase
@@ -119,8 +128,6 @@ export const deleteDeck = async (id: string): Promise<boolean> => {
     .eq('id', id);
   return !error;
 };
-
-// --- HISTORY ---
 
 export const savePracticeResult = async (score: number, total: number, difficulty: string) => {
     await supabase.from('practice_history').insert([{ score, total, difficulty }]);

@@ -15,14 +15,14 @@ const getAi = () => {
 };
 
 /**
- * Searches for a translation and a representative web image URL for any given text.
+ * Searches for a translation and multiple representative web image URLs for any given text.
  */
-export const searchAndTranslate = async (query: string): Promise<{ english: string, thai: string, imageUrl: string }> => {
+export const searchAndTranslate = async (query: string): Promise<{ english: string, thai: string, imageUrls: string[] }> => {
   try {
     const ai = getAi();
     
-    const prompt = `Translate "${query}" between Thai and English. Also, find a direct high-quality web image URL (JPG/PNG) that represents this object/concept. 
-    Return as JSON: {"english": "...", "thai": "...", "imageUrl": "..."}`;
+    const prompt = `Translate "${query}" between Thai and English. Also, find exactly 5 high-quality web image URLs (direct links to JPG/PNG/WEBP) that represent this object/concept clearly. 
+    Return as JSON: {"english": "...", "thai": "...", "imageUrls": ["url1", "url2", "url3", "url4", "url5"]}`;
 
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
@@ -35,9 +35,13 @@ export const searchAndTranslate = async (query: string): Promise<{ english: stri
           properties: {
             english: { type: Type.STRING },
             thai: { type: Type.STRING },
-            imageUrl: { type: Type.STRING, description: "A valid URL to a representative image from the web" }
+            imageUrls: { 
+              type: Type.ARRAY, 
+              items: { type: Type.STRING },
+              description: "Array of 3-5 valid URLs to representative images from the web" 
+            }
           },
-          required: ["english", "thai", "imageUrl"]
+          required: ["english", "thai", "imageUrls"]
         }
       },
     });
@@ -47,11 +51,15 @@ export const searchAndTranslate = async (query: string): Promise<{ english: stri
     return JSON.parse(text);
   } catch (error) {
     console.error("Search/Translate Error:", error);
-    // Fallback if search fails or URL is blocked
+    // Fallback if search fails
     return { 
       english: query, 
       thai: query, 
-      imageUrl: `https://source.unsplash.com/featured/?${encodeURIComponent(query)}` 
+      imageUrls: [
+        `https://source.unsplash.com/featured/?${encodeURIComponent(query)}&1`,
+        `https://source.unsplash.com/featured/?${encodeURIComponent(query)}&2`,
+        `https://source.unsplash.com/featured/?${encodeURIComponent(query)}&3`
+      ] 
     };
   }
 };
@@ -108,21 +116,26 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
   }
 };
 
+/**
+ * Generates CONVERSATIONAL example sentences.
+ */
 export const generateSentences = async (englishName: string, thaiName: string): Promise<SentenceExamples> => {
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: TEXT_MODEL,
-    contents: `Create simple sentences for "${englishName}" (${thaiName}) in past, present, and future. Return JSON.`,
+    contents: `Create 3 short CONVERSATIONAL (dialogue style) English sentences for "${englishName}" (${thaiName}). 
+    One should be casual, one formal, and one a question/answer pair. 
+    Return JSON: {"scenario1": {"en": "...", "th": "..."}, "scenario2": {"en": "...", "th": "..."}, "scenario3": {"en": "...", "th": "..."}}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          past: { type: Type.OBJECT, properties: { en: { type: Type.STRING }, th: { type: Type.STRING } }, required: ["en", "th"] },
-          present: { type: Type.OBJECT, properties: { en: { type: Type.STRING }, th: { type: Type.STRING } }, required: ["en", "th"] },
-          future: { type: Type.OBJECT, properties: { en: { type: Type.STRING }, th: { type: Type.STRING } }, required: ["en", "th"] },
+          scenario1: { type: Type.OBJECT, properties: { en: { type: Type.STRING }, th: { type: Type.STRING } }, required: ["en", "th"] },
+          scenario2: { type: Type.OBJECT, properties: { en: { type: Type.STRING }, th: { type: Type.STRING } }, required: ["en", "th"] },
+          scenario3: { type: Type.OBJECT, properties: { en: { type: Type.STRING }, th: { type: Type.STRING } }, required: ["en", "th"] },
         },
-        required: ["past", "present", "future"],
+        required: ["scenario1", "scenario2", "scenario3"],
       },
     },
   });
@@ -136,6 +149,38 @@ export const generateRelatedVocabulary = async (word: string): Promise<WordAssoc
     contents: `Generate 5 related words and 3 verbs for "${word}" with Thai translations.`,
     config: {
       responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+            relatedWords: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        english: { type: Type.STRING },
+                        thai: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        definition: { type: Type.STRING }
+                    },
+                    required: ["english", "thai", "type", "definition"]
+                }
+            },
+            associatedVerbs: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        english: { type: Type.STRING },
+                        thai: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        definition: { type: Type.STRING }
+                    },
+                    required: ["english", "thai", "type", "definition"]
+                }
+            }
+        },
+        required: ["relatedWords", "associatedVerbs"]
+      }
     },
   });
   return JSON.parse(response.text || "{}");

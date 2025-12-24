@@ -95,7 +95,7 @@ const App: React.FC = () => {
       const results = await identifyObjects(base64Data); 
       
       if (!results || results.length === 0) {
-        throw new Error("NO_OBJECTS: ไม่พบวัตถุในภาพนี้ ลองถ่ายใหม่ให้ชัดเจนขึ้น");
+        throw new Error("NO_OBJECTS: ไม่พบวัตถุในภาพนี้");
       }
       
       setScanResults(results);
@@ -103,10 +103,10 @@ const App: React.FC = () => {
       setSentences(null);
       setAppState(AppState.RESULT);
     } catch (err: any) {
-      setErrorMessage(err.message || "เกิดข้อผิดพลาดในการวิเคราะห์");
+      setErrorMessage(err.message || "เกิดข้อผิดพลาด");
       setAppState(AppState.HOME);
     }
-  }, [language]);
+  }, []);
 
   const handleManualTranslate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,25 +117,30 @@ const App: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      // 1. Search, Translate and find a Web Image
-      const searchResult = await searchAndTranslate(manualText);
+      // Fetch everything concurrently for a rich initial experience
+      const [searchResult, relatedRes] = await Promise.all([
+        searchAndTranslate(manualText),
+        generateRelatedVocabulary(manualText)
+      ]);
       
-      // 2. Generate Sentences for the translated word
       const sentencesResult = await generateSentences(searchResult.english, searchResult.thai);
 
-      setCapturedImage(searchResult.imageUrl);
+      setCapturedImage(searchResult.imageUrls[0]);
       setScanResults([{
         thai: searchResult.thai,
         english: searchResult.english,
-        box_2d: [0, 0, 1, 1], // Full screen box for web image
-        confidence: 1.0
+        box_2d: [0, 0, 1, 1],
+        confidence: 1.0,
+        imageUrls: searchResult.imageUrls
       }]);
+      
+      setRelatedWordsCache(prev => ({ ...prev, [searchResult.english]: relatedRes }));
       setSelectedIndex(0);
       setSentences(sentencesResult);
       setAppState(AppState.RESULT);
-      setManualText(''); // Clear search
+      setManualText(''); 
     } catch (err: any) {
-      setErrorMessage(language === 'th' ? "ไม่พบผลการค้นหาหรือเกิดข้อผิดพลาด" : "Search error.");
+      setErrorMessage(language === 'th' ? "ไม่พบผลการค้นหา" : "Search error.");
       setAppState(AppState.HOME);
     } finally {
       setIsTranslating(false);
@@ -175,7 +180,7 @@ const App: React.FC = () => {
 
   const handleSaveObject = async (obj: DetectedObject) => {
     const associations = relatedWordsCache[obj.english];
-    await saveWord(obj.english, obj.thai, sentences || undefined, associations);
+    await saveWord(obj.english, obj.thai, sentences || undefined, associations, obj.imageUrls);
     setIsSaved(true);
     fetchWords();
   };
@@ -189,7 +194,7 @@ const App: React.FC = () => {
       if (viewingSavedWord) {
          return (
              <SentencesModal 
-                result={{ english: viewingSavedWord.english, thai: viewingSavedWord.thai, confidence: 1, box_2d: [0,0,0,0] }}
+                result={{ english: viewingSavedWord.english, thai: viewingSavedWord.thai, confidence: 1, box_2d: [0,0,0,0], imageUrls: viewingSavedWord.imageUrls }}
                 sentences={viewingSavedWord.sentences || null}
                 onBack={() => setViewingSavedWord(null)}
                 onSave={() => {}} 
@@ -209,7 +214,7 @@ const App: React.FC = () => {
       return (
         <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
-            <p className="text-white text-xl font-bold font-thai">กำลังค้นหาข้อมูลและรูปภาพ...</p>
+            <p className="text-white text-xl font-bold font-thai">กำลังดึงข้อมูลและรูปภาพจากเน็ต...</p>
         </div>
       );
     }
@@ -244,6 +249,20 @@ const App: React.FC = () => {
         );
     }
 
+    if (appState === AppState.RELATED_VIEW && scanResults.length > 0) {
+        const currentObj = scanResults[selectedIndex];
+        const associations = relatedWordsCache[currentObj.english];
+        return (
+            <RelatedWordsModal
+                originalObject={currentObj}
+                associations={associations!}
+                onBack={() => setAppState(AppState.RESULT)}
+                onSaveWord={async (en, th) => { await saveWord(en, th); fetchWords(); }}
+                savedStatus={Object.fromEntries(savedWords.map(w => [w.english.toLowerCase(), true]))}
+            />
+        );
+    }
+
     return (
       <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900 relative overflow-hidden pb-32 transition-colors duration-500">
         <div className="absolute top-0 -left-10 w-72 h-72 bg-indigo-600 rounded-full filter blur-3xl opacity-10 dark:opacity-20 animate-blob"></div>
@@ -265,7 +284,7 @@ const App: React.FC = () => {
           
           <div className="space-y-2">
             <h1 className="text-4xl font-bold text-slate-900 dark:text-white">ThaiSnap Lingo</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-thai">ค้นหาคำศัพท์พร้อมรูปภาพจากทั่วโลก</p>
+            <p className="text-slate-500 dark:text-slate-400 font-thai">พิมพ์เพื่อหาความหมายและรูปภาพ</p>
           </div>
 
           <form onSubmit={handleManualTranslate} className="w-full relative group">
@@ -273,7 +292,7 @@ const App: React.FC = () => {
                 type="text" 
                 value={manualText}
                 onChange={(e) => setManualText(e.target.value)}
-                placeholder={language === 'th' ? "พิมพ์คำที่ต้องการ เช่น 'แมว' หรือ 'Laptop'..." : "Search anything..."}
+                placeholder={language === 'th' ? "พิมพ์คำที่ต้องการ เช่น 'ทะเล' หรือ 'Coffee'..." : "Search anything..."}
                 className="w-full pl-5 pr-14 py-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-thai"
                 disabled={isTranslating}
               />

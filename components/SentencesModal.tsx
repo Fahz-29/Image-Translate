@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { SentenceExamples, DetectedObject } from '../types';
 import { ArrowLeftIcon, SpeakerIcon, BookmarkIcon, SparklesIcon, BookOpenIcon } from './Icons';
@@ -51,7 +52,7 @@ const SentencesModal: React.FC<SentencesModalProps> = ({
         >
           <ArrowLeftIcon className="w-6 h-6" />
         </button>
-        <h2 className="text-xl font-bold font-thai text-slate-900 dark:text-white">ตัวอย่างประโยค</h2>
+        <h2 className="text-xl font-bold font-thai text-slate-900 dark:text-white">ตัวอย่างบทสนทนา</h2>
         <div className="w-10"></div>
       </div>
 
@@ -68,8 +69,6 @@ const SentencesModal: React.FC<SentencesModalProps> = ({
               <SpeakerIcon className="w-6 h-6" />
             </button>
           </div>
-          <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-          <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-32 h-32 bg-black/10 rounded-full blur-2xl"></div>
         </div>
 
         {/* Sentences List */}
@@ -79,46 +78,37 @@ const SentencesModal: React.FC<SentencesModalProps> = ({
                <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-full mb-2 shadow-sm">
                  <BookOpenIcon className="w-8 h-8 text-slate-300" />
                </div>
-               <p className="text-slate-500 dark:text-slate-400 font-thai">ยังไม่มีตัวอย่างประโยคสำหรับคำนี้</p>
+               <p className="text-slate-500 dark:text-slate-400 font-thai">กำลังประมวลผลบทสนทนา...</p>
                {onGenerate && (
                  <button
                    onClick={handleGenerateClick}
                    disabled={isGenerating}
-                   className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center justify-center space-x-2 transition shadow-lg disabled:opacity-50"
+                   className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center space-x-2 transition shadow-lg disabled:opacity-50"
                  >
-                   {isGenerating ? (
-                     <>
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span className="font-thai">กำลังสร้าง...</span>
-                     </>
-                   ) : (
-                     <>
-                        <SparklesIcon className="w-5 h-5" />
-                        <span className="font-thai">สร้างตัวอย่างประโยคด้วย AI</span>
-                     </>
-                   )}
+                   <SparklesIcon className="w-5 h-5" />
+                   <span className="font-thai">{isGenerating ? 'กำลังสร้าง...' : 'สร้างตัวอย่างบทสนทนา'}</span>
                  </button>
                )}
              </div>
           ) : (
             <>
-              {/* Tense Sections */}
+              {/* Scenarios */}
               {[
-                { label: 'Past', thai: 'อดีต', data: sentences.past, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-300' },
-                { label: 'Present', thai: 'ปัจจุบัน', data: sentences.present, color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
-                { label: 'Future', thai: 'อนาคต', data: sentences.future, color: 'bg-blue-500/10 text-blue-600 dark:text-blue-300' }
-              ].map((tense, idx) => (
-                <div key={idx} className="bg-white dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700/50 shadow-sm transition-colors">
+                { label: 'Casual', thai: 'ภาษาพูดทั่วไป', data: sentences.scenario1, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-300' },
+                { label: 'Formal', thai: 'ทางการ', data: sentences.scenario2, color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
+                { label: 'Q & A', thai: 'ถาม-ตอบ', data: sentences.scenario3, color: 'bg-blue-500/10 text-blue-600 dark:text-blue-300' }
+              ].map((item, idx) => (
+                <div key={idx} className="bg-white dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700/50 shadow-sm">
                   <div className="flex items-center space-x-2 mb-3">
-                    <span className={`px-2 py-1 ${tense.color} text-[10px] font-bold uppercase tracking-wider rounded`}>{tense.label}</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs font-thai">{tense.thai}</span>
+                    <span className={`px-2 py-1 ${item.color} text-[10px] font-bold uppercase tracking-wider rounded`}>{item.label}</span>
+                    <span className="text-slate-400 dark:text-slate-500 text-[10px] font-thai">{item.thai}</span>
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between items-start gap-3">
-                      <p className="text-lg text-slate-900 dark:text-white leading-relaxed font-medium">{tense.data.en}</p>
-                      <button onClick={() => handleSpeak(tense.data.en)} className="mt-1 text-slate-400 hover:text-indigo-600 transition"><SpeakerIcon className="w-5 h-5" /></button>
+                      <p className="text-lg text-slate-900 dark:text-white leading-relaxed font-medium italic">"{item.data.en}"</p>
+                      <button onClick={() => handleSpeak(item.data.en)} className="mt-1 text-slate-400 hover:text-indigo-600 transition"><SpeakerIcon className="w-5 h-5" /></button>
                     </div>
-                    <p className="text-slate-600 dark:text-slate-400 font-thai">{tense.data.th}</p>
+                    <p className="text-slate-600 dark:text-slate-400 font-thai text-sm">{item.data.th}</p>
                   </div>
                 </div>
               ))}
@@ -131,10 +121,10 @@ const SentencesModal: React.FC<SentencesModalProps> = ({
          {!isSaved && (
              <button
                onClick={onSave}
-               className="w-full py-4 bg-indigo-600 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold flex items-center justify-center space-x-2 shadow-xl transition-all hover:scale-[1.02] active:scale-95"
+               className="w-full py-4 bg-indigo-600 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold flex items-center justify-center space-x-2 shadow-xl"
              >
                <BookmarkIcon className="w-5 h-5" filled={false} />
-               <span className="font-thai">บันทึกคำศัพท์</span>
+               <span className="font-thai">บันทึกคำศัพท์และบทสนทนา</span>
              </button>
          )}
       </div>

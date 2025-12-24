@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { SavedWord, Deck } from '../types';
 import { SpeakerIcon, ArrowLeftIcon, SparklesIcon, PlayIcon, XMarkIcon, PlusIcon, TrashIcon, PencilIcon, CheckBadgeIcon } from './Icons';
@@ -352,31 +353,34 @@ const Flashcards: React.FC<FlashcardsProps> = ({ words }) => {
                     <div className="flex-[2] overflow-y-auto space-y-3 no-scrollbar">
                         {currentWord.sentences ? (
                             <>
+                                {/* Scenario 1 (Casual) */}
                                 <div className="space-y-1 bg-white/10 p-3 rounded-lg">
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className="text-[10px] uppercase text-indigo-200 font-bold">Past</span>
-                                        <button onClick={(e) => handleSpeak(currentWord.sentences!.past.en, e)} className="p-1 text-indigo-100 hover:text-white"><SpeakerIcon className="w-3 h-3"/></button>
+                                        <span className="text-[10px] uppercase text-indigo-200 font-bold">Casual</span>
+                                        <button onClick={(e) => handleSpeak(currentWord.sentences!.scenario1.en, e)} className="p-1 text-indigo-100 hover:text-white"><SpeakerIcon className="w-3 h-3"/></button>
                                     </div>
-                                    <p className="text-sm text-white italic">"{currentWord.sentences.past.en}"</p>
-                                    <p className="text-xs text-indigo-100 font-thai mt-1">{currentWord.sentences.past.th}</p>
+                                    <p className="text-sm text-white italic">"{currentWord.sentences.scenario1.en}"</p>
+                                    <p className="text-xs text-indigo-100 font-thai mt-1">{currentWord.sentences.scenario1.th}</p>
                                 </div>
 
+                                {/* Scenario 2 (Formal) */}
                                 <div className="space-y-1 bg-white/10 p-3 rounded-lg">
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className="text-[10px] uppercase text-emerald-200 font-bold">Present</span>
-                                        <button onClick={(e) => handleSpeak(currentWord.sentences!.present.en, e)} className="p-1 text-emerald-100 hover:text-white"><SpeakerIcon className="w-3 h-3"/></button>
+                                        <span className="text-[10px] uppercase text-emerald-200 font-bold">Formal</span>
+                                        <button onClick={(e) => handleSpeak(currentWord.sentences!.scenario2.en, e)} className="p-1 text-emerald-100 hover:text-white"><SpeakerIcon className="w-3 h-3"/></button>
                                     </div>
-                                    <p className="text-sm text-white italic">"{currentWord.sentences.present.en}"</p>
-                                    <p className="text-xs text-emerald-100 font-thai mt-1">{currentWord.sentences.present.th}</p>
+                                    <p className="text-sm text-white italic">"{currentWord.sentences.scenario2.en}"</p>
+                                    <p className="text-xs text-emerald-100 font-thai mt-1">{currentWord.sentences.scenario2.th}</p>
                                 </div>
 
+                                {/* Scenario 3 (Q&A) */}
                                 <div className="space-y-1 bg-white/10 p-3 rounded-lg">
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className="text-[10px] uppercase text-blue-200 font-bold">Future</span>
-                                        <button onClick={(e) => handleSpeak(currentWord.sentences!.future.en, e)} className="p-1 text-blue-100 hover:text-white"><SpeakerIcon className="w-3 h-3"/></button>
+                                        <span className="text-[10px] uppercase text-blue-200 font-bold">Q & A</span>
+                                        <button onClick={(e) => handleSpeak(currentWord.sentences!.scenario3.en, e)} className="p-1 text-blue-100 hover:text-white"><SpeakerIcon className="w-3 h-3"/></button>
                                     </div>
-                                    <p className="text-sm text-white italic">"{currentWord.sentences.future.en}"</p>
-                                    <p className="text-xs text-blue-100 font-thai mt-1">{currentWord.sentences.future.th}</p>
+                                    <p className="text-sm text-white italic">"{currentWord.sentences.scenario3.en}"</p>
+                                    <p className="text-xs text-blue-100 font-thai mt-1">{currentWord.sentences.scenario3.th}</p>
                                 </div>
                             </>
                         ) : (

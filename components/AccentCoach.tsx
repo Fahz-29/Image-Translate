@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { SavedWord, PronunciationResult } from '../types';
 import { analyzePronunciation } from '../services/geminiService';
@@ -24,8 +25,9 @@ const AccentCoach: React.FC<AccentCoachProps> = ({ words, onBack }) => {
     const stopRequestedRef = useRef<boolean>(false);
     const shouldAnalyzeRef = useRef<boolean>(false);
 
+    // FIX: Update property access to scenario1, scenario2, scenario3 to match SentenceExamples type
     const getSentencesPool = (word: SavedWord) => {
-        if (word.sentences) return [word.sentences.past.en, word.sentences.present.en, word.sentences.future.en];
+        if (word.sentences) return [word.sentences.scenario1.en, word.sentences.scenario2.en, word.sentences.scenario3.en];
         return [`I see a ${word.english} in the picture.`, `The ${word.english} is very beautiful.`, `Please put the ${word.english} on the table.`];
     };
 
