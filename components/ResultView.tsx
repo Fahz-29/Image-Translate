@@ -82,7 +82,7 @@ const ResultView: React.FC<ResultViewProps> = ({
       </div>
 
       {/* Main Area: Image(s) */}
-      <div className={`relative flex-1 w-full flex items-center justify-center p-4 transition-all duration-700 ease-in-out ${isMinimized ? 'pb-12' : 'pb-80'} z-10`}>
+      <div className={`relative flex-1 w-full flex items-center justify-center p-4 transition-all duration-700 ease-in-out ${isMinimized ? 'pb-16' : 'pb-80'} z-10`}>
         
         <button 
           onClick={onClose}
@@ -149,98 +149,124 @@ const ResultView: React.FC<ResultViewProps> = ({
       </div>
 
       {/* Result Card */}
-      <div className={`absolute bottom-0 w-full p-6 z-20 transition-all duration-700 ${isMinimized ? 'translate-y-[calc(100%-40px)]' : 'translate-y-0'}`}>
-        <div className="bg-slate-900/95 backdrop-blur-3xl border border-white/10 rounded-[40px] p-8 pb-24 shadow-[0_-20px_80px_rgba(0,0,0,0.8)] space-y-4">
+      <div className={`absolute bottom-0 w-full p-4 z-20 transition-all duration-700 ease-in-out ${isMinimized ? 'translate-y-[calc(100%-80px)]' : 'translate-y-0'}`}>
+        <div 
+          onClick={() => isMinimized && setIsMinimized(false)}
+          className={`bg-slate-900/95 backdrop-blur-3xl border border-white/10 rounded-[40px] shadow-[0_-20px_80px_rgba(0,0,0,0.8)] overflow-hidden transition-all duration-500 ${isMinimized ? 'pt-6 pb-6 cursor-pointer hover:bg-slate-900' : 'p-8 pb-24'}`}
+        >
           
-          <div className={`absolute left-1/2 -translate-x-1/2 transition-all duration-500 ${isMinimized ? '-top-10' : '-top-6'}`}>
+          {/* Toggle Button Container */}
+          <div className={`absolute left-1/2 -translate-x-1/2 transition-all duration-500 z-30 ${isMinimized ? 'top-1' : '-top-6'}`}>
              <button 
-               onClick={() => setIsMinimized(!isMinimized)}
+               onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }}
                className={`group flex items-center justify-center rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 border-4 ${
-                 isMinimized ? 'bg-indigo-600 border-white w-16 h-16' : 'bg-indigo-600 border-slate-900 w-12 h-12'
+                 isMinimized ? 'bg-indigo-600 border-white/20 w-12 h-12' : 'bg-indigo-600 border-slate-900 w-12 h-12'
                }`}
              >
-                {isMinimized ? <ChevronUpIcon className="w-8 h-8 text-white animate-bounce" /> : <ChevronDownIcon className="w-6 h-6 text-white" />}
+                {isMinimized ? <ChevronUpIcon className="w-6 h-6 text-white animate-bounce" /> : <ChevronDownIcon className="w-6 h-6 text-white" />}
              </button>
           </div>
 
-          {!isMinimized && (
-            <div className="flex flex-col">
-                <div className="flex justify-between items-center mb-2">
-                    <h2 className="text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase">Verified Discovery</h2>
-                    <span className="text-xs font-mono text-emerald-400 font-black px-2 py-0.5 bg-emerald-400/10 rounded-full">{Math.round(currentObject.confidence * 100)}% Match</span>
-                </div>
-                
-                <div className="flex justify-between items-start">
-                   <div className="flex-1">
-                      <div className="flex items-center space-x-3">
-                        <h1 className="text-4xl font-black text-white capitalize leading-tight tracking-tight">{currentObject.english}</h1>
-                        <button 
-                          onClick={(e) => handleSpeak(currentObject.english, e)}
-                          className="p-2.5 rounded-2xl bg-white/5 hover:bg-indigo-600 text-indigo-400 hover:text-white transition-all shadow-inner"
-                        >
-                          <SpeakerIcon className="w-6 h-6" />
-                        </button>
+          {/* Card Content */}
+          <div className="relative">
+            {isMinimized ? (
+              /* Mini Header (Visible when minimized) */
+              <div className="flex items-center justify-between px-2 animate-fade-in">
+                 <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/20">
+                       <BookOpenIcon className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div>
+                       <h3 className="text-white font-black capitalize leading-tight">{currentObject.english}</h3>
+                       <p className="text-indigo-400 text-[10px] font-thai font-bold">{currentObject.thai}</p>
+                    </div>
+                 </div>
+                 <div className="text-[9px] text-slate-500 dark:text-slate-500 font-thai font-bold uppercase tracking-widest opacity-60">
+                    แตะเพื่อขยาย
+                 </div>
+              </div>
+            ) : (
+              /* Full Content */
+              <div className="animate-fade-in-up">
+                  <div className="flex flex-col">
+                      <div className="flex justify-between items-center mb-2">
+                          <h2 className="text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase">Verified Discovery</h2>
+                          <span className="text-xs font-mono text-emerald-400 font-black px-2 py-0.5 bg-emerald-400/10 rounded-full">{Math.round(currentObject.confidence * 100)}% Match</span>
                       </div>
-                      <p className="text-2xl font-thai font-bold text-indigo-300 mt-1 opacity-90">{currentObject.thai}</p>
                       
-                      {/* Section: Associated Verbs */}
-                      <div className="mt-6 min-h-[40px] flex items-center">
-                         {associations ? (
-                            <div className="flex flex-wrap gap-2 animate-fade-in">
-                                <span className="text-[10px] text-emerald-400 font-black tracking-widest mr-2 uppercase bg-emerald-400/10 px-2 py-1 rounded-md font-thai">
-                                    กริยาที่ใช้คู่กัน
-                                </span>
-                                {associations.associatedVerbs.slice(0, 3).map((verb, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={(e) => handleSpeak(verb.english, e)}
-                                        className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold hover:bg-indigo-500 transition-all"
-                                    >
-                                        {verb.english} ({verb.thai})
-                                    </button>
-                                ))}
+                      <div className="flex justify-between items-start">
+                         <div className="flex-1">
+                            <div className="flex items-center space-x-3">
+                              <h1 className="text-4xl font-black text-white capitalize leading-tight tracking-tight">{currentObject.english}</h1>
+                              <button 
+                                onClick={(e) => handleSpeak(currentObject.english, e)}
+                                className="p-2.5 rounded-2xl bg-white/5 hover:bg-indigo-600 text-indigo-400 hover:text-white transition-all shadow-inner"
+                              >
+                                <SpeakerIcon className="w-6 h-6" />
+                              </button>
                             </div>
-                         ) : isLoadingAssociations ? (
-                            <div className="flex items-center gap-3">
-                                 <div className="flex space-x-1.5">
-                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></div>
-                                 </div>
-                                 <span className="text-xs text-slate-500 font-thai font-bold">กำลังดึงข้อมูลอัจฉริยะ...</span>
+                            <p className="text-2xl font-thai font-bold text-indigo-300 mt-1 opacity-90">{currentObject.thai}</p>
+                            
+                            {/* Section: Associated Verbs */}
+                            <div className="mt-6 min-h-[40px] flex items-center">
+                               {associations ? (
+                                  <div className="flex flex-wrap gap-2 animate-fade-in">
+                                      <span className="text-[10px] text-emerald-400 font-black tracking-widest mr-2 uppercase bg-emerald-400/10 px-2 py-1 rounded-md font-thai">
+                                          กริยาที่ใช้คู่กัน
+                                      </span>
+                                      {associations.associatedVerbs.slice(0, 3).map((verb, i) => (
+                                          <button
+                                              key={i}
+                                              onClick={(e) => handleSpeak(verb.english, e)}
+                                              className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold hover:bg-indigo-500 transition-all"
+                                          >
+                                              {verb.english} ({verb.thai})
+                                          </button>
+                                      ))}
+                                  </div>
+                               ) : isLoadingAssociations ? (
+                                  <div className="flex items-center gap-3">
+                                       <div className="flex space-x-1.5">
+                                          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></div>
+                                       </div>
+                                       <span className="text-xs text-slate-500 font-thai font-bold">กำลังดึงข้อมูลอัจฉริยะ...</span>
+                                  </div>
+                               ) : null}
                             </div>
-                         ) : null}
+                         </div>
+                         
+                         <button 
+                          onClick={(e) => { e.stopPropagation(); onSave(currentObject); }}
+                          className={`p-4 rounded-3xl transition-all shadow-xl ${
+                              isSaved ? 'bg-pink-500 text-white scale-110' : 'bg-white/5 text-slate-400 hover:text-white'
+                          }`}
+                         >
+                           <BookmarkIcon className="w-8 h-8" filled={isSaved} />
+                         </button>
                       </div>
-                   </div>
-                   
-                   <button 
-                    onClick={() => onSave(currentObject)}
-                    className={`p-4 rounded-3xl transition-all shadow-xl ${
-                        isSaved ? 'bg-pink-500 text-white scale-110' : 'bg-white/5 text-slate-400 hover:text-white'
-                    }`}
-                   >
-                     <BookmarkIcon className="w-8 h-8" filled={isSaved} />
-                   </button>
-                </div>
 
-                <div className="flex gap-3 mt-8">
-                    <button
-                        onClick={onShowSentences}
-                        className="flex-1 bg-white text-slate-950 py-4 rounded-2xl font-black flex items-center justify-center space-x-3 transition-all active:scale-[0.95] shadow-xl"
-                    >
-                        <BookOpenIcon className="w-6 h-6" />
-                        <span className="font-thai">ตัวอย่างบทสนทนา</span>
-                    </button>
-                    <button
-                        onClick={onShowRelated}
-                        className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black flex items-center justify-center space-x-3 transition-all active:scale-[0.95] shadow-xl shadow-indigo-600/20"
-                    >
-                        <SquaresPlusIcon className="w-6 h-6" />
-                        <span className="font-thai">คลังคำศัพท์</span>
-                    </button>
-                </div>
-            </div>
-          )}
+                      <div className="flex gap-3 mt-8">
+                          <button
+                              onClick={(e) => { e.stopPropagation(); onShowSentences(); }}
+                              className="flex-1 bg-white text-slate-950 py-4 rounded-2xl font-black flex items-center justify-center space-x-3 transition-all active:scale-[0.95] shadow-xl"
+                          >
+                              <BookOpenIcon className="w-6 h-6" />
+                              <span className="font-thai">ตัวอย่างบทสนทนา</span>
+                          </button>
+                          <button
+                              onClick={(e) => { e.stopPropagation(); onShowRelated(); }}
+                              className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black flex items-center justify-center space-x-3 transition-all active:scale-[0.95] shadow-xl shadow-indigo-600/20"
+                          >
+                              <SquaresPlusIcon className="w-6 h-6" />
+                              <span className="font-thai">คลังคำศัพท์</span>
+                          </button>
+                      </div>
+                  </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
