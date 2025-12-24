@@ -1,6 +1,7 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js';
 
-// These environment variables should be set in your deployment environment
+import { createClient } from '@supabase/supabase-js';
+
+// Environment variables are injected by Vite via the 'define' config
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 
