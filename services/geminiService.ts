@@ -2,15 +2,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult, WordAssociations } from "../types";
 
+// gemini-3-flash-preview is the recommended model for both text and vision (image analysis)
+const VISION_MODEL = 'gemini-3-flash-preview'; 
 const TEXT_MODEL = 'gemini-3-flash-preview';
-const IMAGE_MODEL = 'gemini-2.5-flash-image';
 const AUDIO_MODEL = 'gemini-2.5-flash-native-audio-preview-09-2025';
 
-// FIX: Improved key retrieval and error handling
 const getAi = () => {
   const key = process.env.API_KEY || "";
-  if (!key || key === "MISSING_API_KEY") {
-    throw new Error("API_KEY is not defined. Please add it to your environment variables on Vercel.");
+  if (!key || key === "MISSING_API_KEY" || key.length < 10) {
+    throw new Error("API_KEY_MISSING: โปรดตั้งค่า API_KEY ใน Vercel Settings > Environment Variables");
   }
   return new GoogleGenAI({ apiKey: key });
 };
@@ -32,36 +32,37 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
               box_2d: {
                 type: Type.ARRAY,
                 items: { type: Type.NUMBER },
-                description: "Bounding box of the object in [ymin, xmin, ymax, xmax] format (normalized 0-1).",
+                description: "Bounding box [ymin, xmin, ymax, xmax]",
               },
               confidence: {
                 type: Type.NUMBER,
-                description: "Confidence score between 0.0 and 1.0 representing how certain the model is about this detection.",
+                description: "Confidence score 0.0 to 1.0",
               },
             },
             required: ["thai", "english", "box_2d", "confidence"],
           },
-          description: "List of identified objects found in the image with their bounding boxes and confidence scores.",
         }
       },
       required: ["objects"],
     };
 
     const response = await ai.models.generateContent({
-      model: IMAGE_MODEL,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: base64Image,
+      model: VISION_MODEL,
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                mimeType: "image/jpeg", // Standard for base64 captured from canvas
+                data: base64Image,
+              },
             },
-          },
-          {
-            text: "Identify up to 5 distinct main objects in this image. Return their names in Thai/English, bounding boxes, and confidence scores. Focus on learning vocabulary.",
-          },
-        ],
-      },
+            {
+              text: "Identify up to 5 main objects in this image for an English learning app. Return only JSON with thai, english, box_2d, and confidence.",
+            },
+          ],
+        },
+      ],
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
@@ -69,14 +70,15 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response from AI");
+    if (!text) throw new Error("AI_NO_RESPONSE: Gemini ไม่ตอบกลับข้อมูล");
     
     const json = JSON.parse(text);
     return json.objects as DetectedObject[];
 
-  } catch (error) {
-    console.error("Error identifying objects:", error);
-    throw error;
+  } catch (error: any) {
+    console.error("Gemini Vision Error:", error);
+    // Throw a more descriptive error to be caught by the UI
+    throw new Error(error.message || "Failed to identify objects");
   }
 };
 
@@ -89,56 +91,35 @@ export const generateSentences = async (englishName: string, thaiName: string): 
       properties: {
         past: {
           type: Type.OBJECT,
-          properties: {
-            en: { type: Type.STRING },
-            th: { type: Type.STRING },
-          },
+          properties: { en: { type: Type.STRING }, th: { type: Type.STRING } },
           required: ["en", "th"],
         },
         present: {
           type: Type.OBJECT,
-          properties: {
-            en: { type: Type.STRING },
-            th: { type: Type.STRING },
-          },
+          properties: { en: { type: Type.STRING }, th: { type: Type.STRING } },
           required: ["en", "th"],
         },
         future: {
           type: Type.OBJECT,
-          properties: {
-            en: { type: Type.STRING },
-            th: { type: Type.STRING },
-          },
+          properties: { en: { type: Type.STRING }, th: { type: Type.STRING } },
           required: ["en", "th"],
         },
       },
       required: ["past", "present", "future"],
     };
 
-    const prompt = `
-      Create 3 example sentences for the object "${englishName}" (${thaiName}).
-      1. Past tense.
-      2. Present tense.
-      3. Future tense.
-      Provide both English and Thai translations for each sentence.
-      Keep sentences simple and educational.
-    `;
-
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
-      contents: prompt,
+      contents: `Create simple educational sentences for "${englishName}" (${thaiName}) in past, present, and future tenses. Return JSON with translations.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
       },
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No response from AI");
-    return JSON.parse(text) as SentenceExamples;
-
+    return JSON.parse(response.text || "{}");
   } catch (error) {
-    console.error("Error generating sentences:", error);
+    console.error("Gemini Text Error:", error);
     throw error;
   }
 };
@@ -151,28 +132,26 @@ export const generateRelatedVocabulary = async (word: string): Promise<WordAssoc
             properties: {
                 relatedWords: {
                     type: Type.ARRAY,
-                    description: "5 related nouns, synonyms, or types of objects",
                     items: {
                         type: Type.OBJECT,
                         properties: {
                             english: { type: Type.STRING },
                             thai: { type: Type.STRING },
-                            type: { type: Type.STRING, description: "e.g. Synonym, Type of, Component" },
-                            definition: { type: Type.STRING, description: "Very short definition in Thai" }
+                            type: { type: Type.STRING },
+                            definition: { type: Type.STRING }
                         },
                         required: ["english", "thai", "type", "definition"]
                     }
                 },
                 associatedVerbs: {
                     type: Type.ARRAY,
-                    description: "3 common verbs/actions done WITH this object",
                     items: {
                         type: Type.OBJECT,
                         properties: {
                             english: { type: Type.STRING },
                             thai: { type: Type.STRING },
-                            type: { type: Type.STRING, description: "Always 'Verb' or 'Action'" },
-                            definition: { type: Type.STRING, description: "Context of how this verb is used with the object in Thai" }
+                            type: { type: Type.STRING },
+                            definition: { type: Type.STRING }
                         },
                         required: ["english", "thai", "type", "definition"]
                     }
@@ -181,156 +160,95 @@ export const generateRelatedVocabulary = async (word: string): Promise<WordAssoc
             required: ["relatedWords", "associatedVerbs"]
         };
 
-        const prompt = `Generate vocabulary associations for the object "${word}".
-        
-        1. "relatedWords": Generate 5 related English nouns, synonyms, or specific types (e.g. if cup -> mug, goblet).
-        2. "associatedVerbs": Generate exactly 3 common English verbs that are frequently used with "${word}" (collocations). e.g. if cup -> drink, hold, spill.
-        
-        Provide Thai translations and a very short definition/context in Thai for each.`;
-
         const response = await ai.models.generateContent({
             model: TEXT_MODEL,
-            contents: prompt,
+            contents: `Generate 5 related words and 3 associated verbs for "${word}" with Thai translations.`,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
             },
         });
 
-        const text = response.text;
-        if (!text) throw new Error("No response");
-        return JSON.parse(text) as WordAssociations;
+        return JSON.parse(response.text || "{}");
     } catch (error) {
-        console.error("Error generating related words", error);
         throw error;
     }
 };
 
 export const generateGrammarQuiz = async (word: string, difficulty: string): Promise<QuizQuestion> => {
-    try {
-        const ai = getAi();
-        const responseSchema = {
-            type: Type.OBJECT,
-            properties: {
-                question: { type: Type.STRING, description: "The sentence with a blank or error" },
-                options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 possible answers" },
-                correctIndex: { type: Type.NUMBER, description: "Index of the correct answer (0-3)" },
-                explanation: { type: Type.STRING, description: "Explanation why the answer is correct" },
-                type: { type: Type.STRING, enum: ['grammar_error', 'fill_blank'] }
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: TEXT_MODEL,
+        contents: `Create a ${difficulty} grammar quiz for "${word}". Return JSON with question, options, correctIndex, explanation, and type.`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    question: { type: Type.STRING },
+                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    correctIndex: { type: Type.NUMBER },
+                    explanation: { type: Type.STRING },
+                    type: { type: Type.STRING }
+                },
+                required: ["question", "options", "correctIndex", "explanation", "type"]
             },
-            required: ["question", "options", "correctIndex", "explanation", "type"]
-        };
-
-        const prompt = `Create a multiple-choice grammar quiz question using the word "${word}". 
-        The difficulty level is ${difficulty}.
-        Focus specifically on English grammar rules relevant to this level (e.g. tenses, prepositions, articles, sentence structure).
-        It can be either a "Fill in the blank" style or "Spot the error" style.
-        Provide 4 options and a clear explanation in Thai/English mixed.`;
-
-        const response = await ai.models.generateContent({
-            model: TEXT_MODEL,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
-            },
-        });
-
-        const text = response.text;
-        if (!text) throw new Error("No response");
-        return JSON.parse(text) as QuizQuestion;
-
-    } catch (error) {
-        console.error("Error generating quiz", error);
-        throw error;
-    }
+        },
+    });
+    return JSON.parse(response.text || "{}");
 };
 
 export const generateBatchGrammarQuiz = async (words: string[], difficulty: string): Promise<QuizQuestion[]> => {
-    try {
-        const ai = getAi();
-        const responseSchema = {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    question: { type: Type.STRING, description: "The sentence with a blank or error" },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 possible answers" },
-                    correctIndex: { type: Type.NUMBER, description: "Index of the correct answer (0-3)" },
-                    explanation: { type: Type.STRING, description: "Explanation why the answer is correct" },
-                    type: { type: Type.STRING, enum: ['grammar_error', 'fill_blank'] }
-                },
-                required: ["question", "options", "correctIndex", "explanation", "type"]
-            }
-        };
-
-        const prompt = `Create ${words.length} multiple-choice grammar quiz questions.
-        Generate exactly one question for each of these words: ${words.join(', ')}.
-        The difficulty level is ${difficulty}.
-        Focus specifically on English grammar rules relevant to this level (e.g. tenses, prepositions, articles, sentence structure).
-        Mix "Fill in the blank" and "Spot the error" styles.
-        Provide 4 options and a clear explanation in Thai/English mixed for each.`;
-
-        const response = await ai.models.generateContent({
-            model: TEXT_MODEL,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: TEXT_MODEL,
+        contents: `Create ${words.length} grammar quizzes for: ${words.join(', ')}. Difficulty: ${difficulty}. Return array of JSON objects.`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        question: { type: Type.STRING },
+                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        correctIndex: { type: Type.NUMBER },
+                        explanation: { type: Type.STRING },
+                        type: { type: Type.STRING }
+                    },
+                    required: ["question", "options", "correctIndex", "explanation", "type"]
+                }
             },
-        });
-
-        const text = response.text;
-        if (!text) throw new Error("No response");
-        return JSON.parse(text) as QuizQuestion[];
-
-    } catch (error) {
-        console.error("Error generating batch quiz", error);
-        throw error;
-    }
+        },
+    });
+    return JSON.parse(response.text || "[]");
 };
 
 export const analyzePronunciation = async (audioBase64: string, targetSentence: string): Promise<PronunciationResult> => {
-    try {
-        const ai = getAi();
-        const responseSchema = {
-            type: Type.OBJECT,
-            properties: {
-                score: { type: Type.NUMBER, description: "Score from 0 to 100. Return 0 if no clear speech is detected." },
-                accent: { type: Type.STRING, description: "Identified accent style, or 'Unknown' if no speech." },
-                feedback: { type: Type.STRING, description: "Constructive feedback on pronunciation." },
-                phonemes: { type: Type.STRING, description: "Simple phonetic representation of what was heard." }
-            },
-            required: ["score", "accent", "feedback", "phonemes"]
-        };
-
-        const response = await ai.models.generateContent({
-            model: AUDIO_MODEL,
-            contents: {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: AUDIO_MODEL,
+        contents: [
+            {
                 parts: [
-                    {
-                        inlineData: {
-                            mimeType: "audio/webm",
-                            data: audioBase64
-                        }
-                    },
-                    {
-                        text: `The user is trying to say: "${targetSentence}". Rate their pronunciation accuracy.`
-                    }
+                    { inlineData: { mimeType: "audio/webm", data: audioBase64 } },
+                    { text: `Rate this pronunciation of: "${targetSentence}"` }
                 ]
+            }
+        ],
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    score: { type: Type.NUMBER },
+                    accent: { type: Type.STRING },
+                    feedback: { type: Type.STRING },
+                    phonemes: { type: Type.STRING }
+                },
+                required: ["score", "accent", "feedback", "phonemes"]
             },
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
-            },
-        });
-
-        const text = response.text;
-        if (!text) throw new Error("No response");
-        return JSON.parse(text) as PronunciationResult;
-
-    } catch (error) {
-        console.error("Error analyzing audio:", error);
-        throw error;
-    }
+        },
+    });
+    return JSON.parse(response.text || "{}");
 };

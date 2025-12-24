@@ -96,21 +96,29 @@ const App: React.FC = () => {
     setErrorMessage(null);
     
     try {
-      const results = await identifyObjects(imageSrc.split(',')[1]); 
+      const base64Data = imageSrc.includes(',') ? imageSrc.split(',')[1] : imageSrc;
+      const results = await identifyObjects(base64Data); 
+      
       if (!results || results.length === 0) {
-        throw new Error("No objects found in the image.");
+        throw new Error("NO_OBJECTS: ไม่พบวัตถุในภาพนี้ ลองถ่ายใหม่ให้ชัดเจนขึ้น");
       }
+      
       setScanResults(results);
       setSelectedIndex(0); 
       setSentences(null);
       setAppState(AppState.RESULT);
     } catch (err: any) {
-      console.error("Identification Error:", err);
-      // Determine error type for better user feedback
-      let msg = language === 'th' ? "ไม่สามารถระบุวัตถุได้" : "Could not identify objects.";
-      if (err.message?.includes('API_KEY')) {
-        msg = language === 'th' ? "ตรวจสอบ API Key ของคุณใน Vercel/Environment" : "Missing API Key in Environment Settings.";
+      console.error("App identification error:", err);
+      let msg = err.message || "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
+      
+      if (msg.includes('API_KEY_MISSING')) {
+        msg = language === 'th' ? "ยังไม่ได้ตั้งค่า API Key ใน Vercel Dashboard" : "API Key is missing in Vercel settings.";
+      } else if (msg.includes('403') || msg.includes('401')) {
+        msg = language === 'th' ? "API Key ไม่ถูกต้อง หรือไม่มีสิทธิ์ใช้งาน Model นี้" : "Invalid API Key or no permission for this model.";
+      } else if (msg.includes('Model not found')) {
+        msg = "ไม่พบ Model ที่ระบุ โปรดตรวจสอบชื่อ Model ในโค้ด";
       }
+
       setErrorMessage(msg);
       setAppState(AppState.HOME);
     }
