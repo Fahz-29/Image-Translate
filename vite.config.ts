@@ -11,12 +11,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // We must stringify the values because 'define' does a straight search-and-replace.
-      // If we don't stringify, a value like ABC-123 will be treated as code (subtraction),
-      // which causes the "Invalid define value" error you saw.
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || ""),
-      'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL || process.env.SUPABASE_URL || ""),
-      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ""),
+      // Use clean string values for environment variables.
+      // We strip any accidental double-quotes that might come from .env file syntax
+      'process.env.API_KEY': JSON.stringify((env.API_KEY || process.env.API_KEY || "").replace(/^["'](.+)["']$/, '$1').trim()),
+      'process.env.SUPABASE_URL': JSON.stringify((env.SUPABASE_URL || process.env.SUPABASE_URL || "").replace(/^["'](.+)["']$/, '$1').trim()),
+      'process.env.SUPABASE_ANON_KEY': JSON.stringify((env.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "").replace(/^["'](.+)["']$/, '$1').trim()),
     },
     build: {
       outDir: 'dist',

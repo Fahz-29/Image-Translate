@@ -9,7 +9,7 @@ import SavedList from './components/SavedList';
 import Flashcards from './components/Flashcards';
 import PracticeHub from './components/PracticeHub';
 import SettingsView from './components/SettingsView';
-import { CameraIcon, SparklesIcon, PhotoIcon, GlobeIcon } from './components/Icons';
+import { CameraIcon, SparklesIcon, PhotoIcon, GlobeIcon, XMarkIcon } from './components/Icons';
 import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssociations, Language } from './types';
 import { identifyObjects, generateSentences, generateRelatedVocabulary } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
@@ -34,7 +34,7 @@ const App: React.FC = () => {
   const [sentences, setSentences] = useState<SentenceExamples | null>(null);
   const [relatedWordsCache, setRelatedWordsCache] = useState<Record<string, WordAssociations>>({});
   const [isLoadingAssociations, setIsLoadingAssociations] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [isWordsLoading, setIsWordsLoading] = useState(false);
@@ -93,15 +93,25 @@ const App: React.FC = () => {
   const handleImageCaptured = useCallback(async (imageSrc: string) => {
     setCapturedImage(imageSrc);
     setAppState(AppState.ANALYZING);
+    setErrorMessage(null);
+    
     try {
       const results = await identifyObjects(imageSrc.split(',')[1]); 
-      if (results.length === 0) throw new Error("No objects found");
+      if (!results || results.length === 0) {
+        throw new Error("No objects found in the image.");
+      }
       setScanResults(results);
       setSelectedIndex(0); 
       setSentences(null);
       setAppState(AppState.RESULT);
-    } catch (err) {
-      setError(language === 'th' ? "ไม่สามารถระบุวัตถุได้ ลองใหม่อีกครั้ง" : "Could not identify objects. Try again.");
+    } catch (err: any) {
+      console.error("Identification Error:", err);
+      // Determine error type for better user feedback
+      let msg = language === 'th' ? "ไม่สามารถระบุวัตถุได้" : "Could not identify objects.";
+      if (err.message?.includes('API_KEY')) {
+        msg = language === 'th' ? "ตรวจสอบ API Key ของคุณใน Vercel/Environment" : "Missing API Key in Environment Settings.";
+      }
+      setErrorMessage(msg);
       setAppState(AppState.HOME);
     }
   }, [language]);
@@ -113,24 +123,19 @@ const App: React.FC = () => {
     setIsTranslating(true);
     setAppState(AppState.ANALYZING);
     try {
-      // Use identifyObjects but since it's text, we'll mimic the result structure
-      // For simplicity, we create a virtual "DetectedObject" from a manual word search
-      // In a real app, you might have a dedicated translateWord function
-      const result = await generateSentences(manualText, manualText); // Placeholder logic
-      
-      // Update results with a dummy entry for Manual Translation
+      const result = await generateSentences(manualText, manualText); 
       setScanResults([{
         thai: manualText,
-        english: manualText, // This would need actual translation logic in geminiService
+        english: manualText,
         box_2d: [0, 0, 1, 1],
         confidence: 1.0
       }]);
       setSelectedIndex(0);
       setSentences(result);
-      setCapturedImage(null); // No image for manual text
+      setCapturedImage(null);
       setAppState(AppState.RESULT);
     } catch (err) {
-      setError("เกิดข้อผิดพลาดในการแปล");
+      setErrorMessage(language === 'th' ? "เกิดข้อผิดพลาดในการแปล" : "Translation error.");
       setAppState(AppState.HOME);
     } finally {
       setIsTranslating(false);
@@ -146,7 +151,7 @@ const App: React.FC = () => {
       setSentences(result);
       setAppState(AppState.SENTENCES_VIEW);
     } catch (err) {
-      setError(language === 'th' ? "เกิดข้อผิดพลาดในการสร้างประโยค" : "Error generating sentences.");
+      setErrorMessage(language === 'th' ? "เกิดข้อผิดพลาดในการสร้างประโยค" : "Error generating sentences.");
       setAppState(AppState.RESULT);
     }
   }, [scanResults, selectedIndex, language]);
@@ -222,7 +227,7 @@ const App: React.FC = () => {
     if (appState === AppState.RESULT && scanResults.length > 0) {
       return (
         <ResultView 
-          imageSrc={capturedImage || 'https://images.unsplash.com/photo-1546410531-bb4caa6b424d?q=80&w=2071&auto=format&fit=crop'} 
+          imageSrc={capturedImage || ''} 
           results={scanResults} 
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex} 
@@ -267,6 +272,23 @@ const App: React.FC = () => {
       <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900 relative overflow-hidden pb-32 transition-colors duration-500">
         <div className="absolute top-0 -left-10 w-72 h-72 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 dark:opacity-20 animate-blob"></div>
         <div className="absolute bottom-0 -right-10 w-72 h-72 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 dark:opacity-20 animate-blob animation-delay-2000"></div>
+
+        {/* Error Alert */}
+        {errorMessage && (
+          <div className="absolute top-10 left-6 right-6 z-50 animate-bounce-short">
+             <div className="bg-red-500 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-red-400">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-white/20 rounded-full">
+                      <XMarkIcon className="w-5 h-5" />
+                   </div>
+                   <p className="text-sm font-bold font-thai">{errorMessage}</p>
+                </div>
+                <button onClick={() => setErrorMessage(null)} className="p-1 hover:bg-white/10 rounded-full transition">
+                   <XMarkIcon className="w-4 h-4" />
+                </button>
+             </div>
+          </div>
+        )}
 
         <div className="relative z-10 text-center space-y-8 w-full max-w-sm">
           <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-xl ring-1 ring-slate-200 dark:ring-slate-700 mx-auto">

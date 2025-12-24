@@ -1,19 +1,24 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult, WordAssociations } from "../types";
 
-// Always select recommended models based on task type according to @google/genai guidelines.
 const TEXT_MODEL = 'gemini-3-flash-preview';
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
 const AUDIO_MODEL = 'gemini-2.5-flash-native-audio-preview-09-2025';
 
-// FIX: Initializing fresh instance within requests to avoid stale API keys and follow guidelines.
-const getAi = () => new GoogleGenAI({ apiKey: process.env.API_KEY || "MISSING_API_KEY" });
+// FIX: Improved key retrieval and error handling
+const getAi = () => {
+  const key = process.env.API_KEY || "";
+  if (!key || key === "MISSING_API_KEY") {
+    throw new Error("API_KEY is not defined. Please add it to your environment variables on Vercel.");
+  }
+  return new GoogleGenAI({ apiKey: key });
+};
 
 export const identifyObjects = async (base64Image: string): Promise<DetectedObject[]> => {
   try {
     const ai = getAi();
     
-    // Using Type directly as recommended.
     const responseSchema = {
       type: Type.OBJECT,
       properties: {
@@ -53,7 +58,7 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
             },
           },
           {
-            text: "Identify up to 5 distinct main objects in this image. Return their names in Thai/English, bounding boxes, and confidence scores.",
+            text: "Identify up to 5 distinct main objects in this image. Return their names in Thai/English, bounding boxes, and confidence scores. Focus on learning vocabulary.",
           },
         ],
       },
@@ -63,7 +68,6 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
       },
     });
 
-    // Property text returns string, not a method.
     const text = response.text;
     if (!text) throw new Error("No response from AI");
     
@@ -306,19 +310,12 @@ export const analyzePronunciation = async (audioBase64: string, targetSentence: 
                 parts: [
                     {
                         inlineData: {
-                            mimeType: "audio/webm", // Standard audio formats are supported for Unary generateContent.
+                            mimeType: "audio/webm",
                             data: audioBase64
                         }
                     },
                     {
-                        text: `The user is trying to say: "${targetSentence}". 
-                        
-                        STRICT INSTRUCTIONS:
-                        1. **Check for Speech**: First, listen if there is actual speech matching the target sentence. If the audio is silent, just background noise, or too short/unintelligible, return a score of 0 and feedback like "ไม่ได้รับเสียงพูด หรือเสียงเบาเกินไป กรุณาลองใหม่อีกครั้ง".
-                        2. **Rate Accuracy**: Only if speech is present, rate the pronunciation accuracy (0-100). Be strict. 
-                        3. **Identify Accent**: Identify the accent style (e.g. American, British, Strong Thai Accent, etc.).
-                        4. **Feedback**: Give specific feedback on which words or sounds were unclear.
-                        5. **Phonetics**: Provide a phonetic breakdown of what you *actually* heard.`
+                        text: `The user is trying to say: "${targetSentence}". Rate their pronunciation accuracy.`
                     }
                 ]
             },
@@ -333,7 +330,7 @@ export const analyzePronunciation = async (audioBase64: string, targetSentence: 
         return JSON.parse(text) as PronunciationResult;
 
     } catch (error) {
-        console.error("Error analyzing audio", error);
+        console.error("Error analyzing audio:", error);
         throw error;
     }
 };
