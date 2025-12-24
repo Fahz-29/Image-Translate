@@ -4,17 +4,19 @@ import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load environment variables from the current directory (process.cwd())
-  // The empty string as third argument tells Vite to load all variables (not just VITE_ prefixed)
+  // Load env file based on `mode` in the current working directory.
+  // Set the third parameter to '' to load all envs regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
     plugins: [react()],
     define: {
-      // This maps the server-side environment variables to the client-side code
-      'process.env.API_KEY': "AIzaSyAYO3-je4BjKenu0swJUH000dmUMNQmQK0",
-      'process.env.SUPABASE_URL': "https://kaghnkhyylftabxuxdxn.supabase.co",
-      'process.env.SUPABASE_ANON_KEY': "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthZ2hua2h5eWxmdGFieHV4ZHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MzUyOTMsImV4cCI6MjA4MjExMTI5M30.388Buh9KT5OOxiiYdFqz6SnQgnNExzfDr3hOpEa3ea0",
+      // We must stringify the values because 'define' does a straight search-and-replace.
+      // If we don't stringify, a value like ABC-123 will be treated as code (subtraction),
+      // which causes the "Invalid define value" error you saw.
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || ""),
+      'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL || process.env.SUPABASE_URL || ""),
+      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ""),
     },
     build: {
       outDir: 'dist',
