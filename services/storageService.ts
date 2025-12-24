@@ -33,7 +33,7 @@ export const getSavedWords = async (): Promise<SavedWord[]> => {
 
 /**
  * บันทึกคำศัพท์
- * คืนค่าเป็น Object ที่มี data (SavedWord) หรือ error (string)
+ * คืนค่าเป็น Object ที่มี data (SavedWord), error (string) และ schemaIncomplete (boolean)
  */
 export const saveWord = async (
   english: string, 
@@ -41,64 +41,70 @@ export const saveWord = async (
   sentences?: SentenceExamples, 
   associations?: WordAssociations,
   imageUrls?: string[]
-): Promise<{ data: SavedWord | null, error: string | null }> => {
-  try {
-    // 1. ตรวจสอบว่ามีคำนี้อยู่แล้วหรือไม่ (Case Insensitive)
+): Promise<{ data: SavedWord | null, error: string | null, schemaIncomplete: boolean }> => {
+  const attemptSave = async (includeImages: boolean) => {
     const { data: existing } = await supabase
       .from('words')
       .select('*')
       .ilike('english', english)
       .maybeSingle();
 
-    // 2. เตรียมข้อมูล (ปรับชื่อคอลัมน์ให้ตรงกับ SQL)
     const payload: any = {
       english: english.toLowerCase(),
       thai,
       sentences: sentences || (existing ? existing.sentences : null),
       associations: associations || (existing ? existing.associations : null),
-      image_urls: imageUrls || (existing?.image_urls) || [],
       timestamp: new Date().toISOString()
     };
 
-    let finalData;
+    if (includeImages) {
+      payload.image_urls = imageUrls || (existing?.image_urls) || [];
+    }
+
     if (existing) {
-      const { data, error } = await supabase
+      return await supabase
         .from('words')
         .update(payload)
         .eq('id', existing.id)
         .select()
         .single();
-      
-      if (error) throw error;
-      finalData = data;
     } else {
-      const { data, error } = await supabase
+      return await supabase
         .from('words')
         .insert([payload])
         .select()
         .single();
-      
-      if (error) throw error;
-      finalData = data;
+    }
+  };
+
+  try {
+    // ครั้งที่ 1: ลองบันทึกแบบปกติ (รวมรูปภาพ)
+    const { data, error } = await attemptSave(true);
+    
+    if (error) {
+      // หาก error เพราะไม่มีคอลัมน์ image_urls
+      if (error.message.includes('image_urls') || error.message.includes('column')) {
+        console.warn("⚠️ Database missing 'image_urls' column. Retrying without images...");
+        const fallback = await attemptSave(false);
+        if (fallback.error) throw fallback.error;
+        
+        return { 
+          data: { ...fallback.data, imageUrls: [] }, 
+          error: null, 
+          schemaIncomplete: true 
+        };
+      }
+      throw error;
     }
 
     return { 
-      data: { ...finalData, imageUrls: finalData.image_urls || [] }, 
-      error: null 
+      data: { ...data, imageUrls: data.image_urls || [] }, 
+      error: null, 
+      schemaIncomplete: false 
     };
   } catch (err: any) {
-    const errorMsg = err.message || "Unknown error";
-    console.error("❌ Supabase Save Failure:", errorMsg);
-    
-    // ดักจับกรณีคอลัมน์ image_urls หายไป
-    if (errorMsg.includes('column "image_urls"') || errorMsg.includes('image_urls')) {
-        return { 
-            data: null, 
-            error: "DATABASE_SCHEMA_ERROR: ตาราง 'words' ขาดคอลัมน์ 'image_urls' กรุณารัน SQL 'ALTER TABLE words ADD COLUMN image_urls TEXT[];' ใน Supabase SQL Editor" 
-        };
-    }
-    
-    return { data: null, error: `Supabase Error: ${errorMsg}` };
+    console.error("❌ Supabase Save Failure:", err.message);
+    return { data: null, error: err.message, schemaIncomplete: false };
   }
 };
 
