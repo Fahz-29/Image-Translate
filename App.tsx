@@ -14,9 +14,6 @@ import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssocia
 import { identifyObjects, generateSentences, generateRelatedVocabulary, searchAndTranslate } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
 
-// จัดการ Type สำหรับ AI Studio tools
-// Removed redundant declare global block to resolve duplicate identifier and modifier conflicts with environment types.
-
 const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<Tab>(Tab.HOME);
   const [appState, setAppState] = useState<AppState>(AppState.HOME);
@@ -200,9 +197,13 @@ const App: React.FC = () => {
 
   const handleSaveObject = async (obj: DetectedObject) => {
     const associations = relatedWordsCache[obj.english];
-    await saveWord(obj.english, obj.thai, sentences || undefined, associations, obj.imageUrls);
-    setIsSaved(true);
-    fetchWords();
+    const saved = await saveWord(obj.english, obj.thai, sentences || undefined, associations, obj.imageUrls);
+    if (saved) {
+        setIsSaved(true);
+        await fetchWords(); // รีเฟรชรายการคำศัพท์ทันที
+    } else {
+        setErrorMessage("ไม่สามารถบันทึกข้อมูลได้ กรุณาตรวจสอบการตั้งค่า Supabase");
+    }
   };
 
   const handleTabChange = useCallback((tab: Tab) => {
@@ -235,7 +236,7 @@ const App: React.FC = () => {
              />
          );
       }
-      return <SavedList words={savedWords} onDelete={id => { removeWord(id); fetchWords(); }} onSelectWord={setViewingSavedWord} />;
+      return <SavedList words={savedWords} onDelete={async id => { await removeWord(id); fetchWords(); }} onSelectWord={setViewingSavedWord} />;
     }
 
     if (currentTab === Tab.FLASHCARDS) return <Flashcards words={savedWords} />;
@@ -290,7 +291,7 @@ const App: React.FC = () => {
                 originalObject={currentObj}
                 associations={associations!}
                 onBack={() => setAppState(AppState.RESULT)}
-                onSaveWord={async (en, th) => { await saveWord(en, th); fetchWords(); }}
+                onSaveWord={async (en, th) => { const saved = await saveWord(en, th); if (saved) fetchWords(); }}
                 savedStatus={Object.fromEntries(savedWords.map(w => [w.english.toLowerCase(), true]))}
             />
         );

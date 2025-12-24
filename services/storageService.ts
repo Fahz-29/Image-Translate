@@ -5,20 +5,26 @@ import { supabase } from './supabaseClient';
 // --- WORDS ---
 
 export const getSavedWords = async (): Promise<SavedWord[]> => {
-  const { data, error } = await supabase
-    .from('words')
-    .select('*')
-    .order('timestamp', { ascending: false });
-  
-  if (error) {
-    console.error("Failed to fetch words", error);
+  try {
+    const { data, error } = await supabase
+      .from('words')
+      .select('*')
+      .order('timestamp', { ascending: false });
+    
+    if (error) {
+        console.error("Supabase SELECT Error:", error.message);
+        return [];
+    }
+    
+    return (data || []).map(w => ({
+        ...w,
+        imageUrls: w.image_urls || [], 
+        timestamp: w.timestamp ? new Date(w.timestamp).getTime() : Date.now()
+    }));
+  } catch (e) {
+    console.error("Failed to fetch words:", e);
     return [];
   }
-  return data.map(w => ({
-      ...w,
-      imageUrls: w.image_urls, // Map from DB Snake Case
-      timestamp: new Date(w.timestamp).getTime()
-  }));
 };
 
 export const saveWord = async (
@@ -28,38 +34,46 @@ export const saveWord = async (
   associations?: WordAssociations,
   imageUrls?: string[]
 ): Promise<SavedWord | null> => {
-  const { data: existing } = await supabase
-    .from('words')
-    .select('*')
-    .eq('english', english)
-    .single();
-
-  const payload = {
-    english,
-    thai,
-    sentences: sentences || (existing ? existing.sentences : null),
-    associations: associations || (existing ? existing.associations : null),
-    image_urls: imageUrls || (existing ? existing.image_urls : null),
-    timestamp: new Date().toISOString()
-  };
-
-  if (existing) {
-    const { data, error } = await supabase
+  try {
+    // ใช้ maybeSingle() เพื่อไม่ให้พังถ้าหาไม่เจอ
+    const { data: existing } = await supabase
       .from('words')
-      .update(payload)
-      .eq('id', existing.id)
-      .select()
-      .single();
-    if (error) return null;
-    return { ...data, imageUrls: data.image_urls };
-  } else {
-    const { data, error } = await supabase
-      .from('words')
-      .insert([payload])
-      .select()
-      .single();
-    if (error) return null;
-    return { ...data, imageUrls: data.image_urls };
+      .select('*')
+      .eq('english', english)
+      .maybeSingle();
+
+    const payload = {
+      english,
+      thai,
+      sentences: sentences || (existing ? existing.sentences : null),
+      associations: associations || (existing ? existing.associations : null),
+      image_urls: imageUrls || (existing ? existing.image_urls : []),
+      timestamp: new Date().toISOString()
+    };
+
+    if (existing) {
+      const { data, error } = await supabase
+        .from('words')
+        .update(payload)
+        .eq('id', existing.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return { ...data, imageUrls: data.image_urls };
+    } else {
+      const { data, error } = await supabase
+        .from('words')
+        .insert([payload])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return { ...data, imageUrls: data.image_urls };
+    }
+  } catch (err: any) {
+    console.error("Supabase SAVE Error:", err.message || err);
+    return null;
   }
 };
 
@@ -69,20 +83,27 @@ export const removeWord = async (id: string): Promise<boolean> => {
     .delete()
     .eq('id', id);
   
-  if (error) return false;
+  if (error) {
+    console.error("Supabase DELETE Error:", error.message);
+    return false;
+  }
   return true;
 };
 
 export const isWordSaved = async (english: string): Promise<boolean> => {
-    const { data } = await supabase
-      .from('words')
-      .select('id')
-      .eq('english', english)
-      .single();
-    return !!data;
+    try {
+        const { data } = await supabase
+          .from('words')
+          .select('id')
+          .eq('english', english)
+          .maybeSingle();
+        return !!data;
+    } catch {
+        return false;
+    }
 };
 
-// --- DECKS & HISTORY (Existing logic unchanged) ---
+// --- DECKS & HISTORY ---
 
 export const getDecks = async (): Promise<Deck[]> => {
   const { data, error } = await supabase
@@ -91,9 +112,9 @@ export const getDecks = async (): Promise<Deck[]> => {
     .order('created_at', { ascending: false });
   
   if (error) return [];
-  return data.map(d => ({
+  return (data || []).map(d => ({
       ...d,
-      wordIds: d.word_ids,
+      wordIds: d.word_ids || [],
       createdAt: new Date(d.created_at).getTime()
   }));
 };
