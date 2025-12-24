@@ -15,16 +15,7 @@ import { identifyObjects, generateSentences, generateRelatedVocabulary, searchAn
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
 
 // จัดการ Type สำหรับ AI Studio tools
-// FIX: Defined AIStudio interface and updated global Window declaration to match expected platform types and modifiers.
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey(): Promise<boolean>;
-    openSelectKey(): Promise<void>;
-  }
-  interface Window {
-    readonly aistudio: AIStudio;
-  }
-}
+// Removed redundant declare global block to resolve duplicate identifier and modifier conflicts with environment types.
 
 const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<Tab>(Tab.HOME);

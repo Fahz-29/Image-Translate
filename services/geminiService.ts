@@ -12,22 +12,20 @@ const getAi = () => {
 };
 
 /**
- * Searches for a translation and multiple representative web image URLs for any given text.
+ * Searches for a translation and one representative web image URL for any given text.
  */
 export const searchAndTranslate = async (query: string): Promise<{ english: string, thai: string, imageUrls: string[] }> => {
   const ai = getAi();
   
-  // FIX: Guideline states response.text may not be JSON when using googleSearch.
-  // We remove googleSearch tool here to ensure JSON parsing succeeds, as translations 
-  // and image URL retrieval by prompt are primarily generative tasks.
+  // Update: Only requesting 1 representative image as requested by the user.
   const prompt = `Task: Translate the user's query "${query}" between Thai and English. 
-  Then, find exactly 5 high-quality, publicly accessible web image URLs that best represent this word.
+  Then, find exactly 1 high-quality, publicly accessible web image URL that best represents this word.
   
   Return ONLY JSON format: 
   {
     "english": "English word",
     "thai": "คำแปลภาษาไทย",
-    "imageUrls": ["https://url1.jpg", "https://url2.jpg", "https://url3.jpg", "https://url4.jpg", "https://url5.jpg"]
+    "imageUrls": ["https://url1.jpg"]
   }`;
 
   const response = await ai.models.generateContent({
@@ -43,8 +41,8 @@ export const searchAndTranslate = async (query: string): Promise<{ english: stri
           imageUrls: { 
             type: Type.ARRAY, 
             items: { type: Type.STRING },
-            minItems: 3,
-            maxItems: 5
+            minItems: 1,
+            maxItems: 1
           }
         },
         required: ["english", "thai", "imageUrls"]
@@ -56,14 +54,16 @@ export const searchAndTranslate = async (query: string): Promise<{ english: stri
   if (!text) throw new Error("AI_NO_RESPONSE");
   const parsed = JSON.parse(text);
   
-  const validUrls = parsed.imageUrls.filter((url: string) => url.startsWith('http'));
+  const validUrls = (parsed.imageUrls || []).filter((url: string) => url.startsWith('http'));
   const finalUrls = [...validUrls];
   const englishWord = parsed.english;
-  while (finalUrls.length < 5) {
-    finalUrls.push(`https://images.unsplash.com/photo-1?auto=format&fit=crop&w=800&q=80&sig=${finalUrls.length}&keyword=${encodeURIComponent(englishWord)}`);
+
+  // Ensure we have at least one image URL, using Unsplash as fallback if needed.
+  if (finalUrls.length < 1) {
+    finalUrls.push(`https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=80&sig=1&keyword=${encodeURIComponent(englishWord)}`);
   }
 
-  return { ...parsed, imageUrls: finalUrls };
+  return { ...parsed, imageUrls: finalUrls.slice(0, 1) };
 };
 
 export const identifyObjects = async (base64Image: string): Promise<DetectedObject[]> => {

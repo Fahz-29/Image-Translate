@@ -24,9 +24,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
     }, []);
 
     const handleManageKey = async () => {
+        // FIX: Mitigate race condition by assuming successful key selection after openSelectKey returns.
         await window.aistudio.openSelectKey();
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        setHasPersonalKey(hasKey);
+        setHasPersonalKey(true);
     };
 
     const t = {
