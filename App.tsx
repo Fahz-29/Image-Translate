@@ -7,8 +7,9 @@ import NavBar from './components/NavBar';
 import SavedList from './components/SavedList';
 import Flashcards from './components/Flashcards';
 import PracticeHub from './components/PracticeHub';
+import SettingsView from './components/SettingsView';
 import { CameraIcon, SparklesIcon, PhotoIcon } from './components/Icons';
-import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssociations } from './types';
+import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssociations, Language } from './types';
 import { identifyObjects, generateSentences, generateRelatedVocabulary } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
 
@@ -16,418 +17,247 @@ const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<Tab>(Tab.HOME);
   const [appState, setAppState] = useState<AppState>(AppState.HOME);
   
-  // Camera & Detection
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('thaisnap_theme');
+    return (saved as 'dark' | 'light') || 'dark';
+  });
+
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = localStorage.getItem('thaisnap_lang');
+    return (saved as Language) || 'th';
+  });
+
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [scanResults, setScanResults] = useState<DetectedObject[]>([]);
   const [selectedObjectIndex, setSelectedObjectIndex] = useState<number>(0);
   const [sentences, setSentences] = useState<SentenceExamples | null>(null);
-  
-  // Cache for related words: Key = English Name, Value = Associations
   const [relatedWordsCache, setRelatedWordsCache] = useState<Record<string, WordAssociations>>({});
   const [isLoadingAssociations, setIsLoadingAssociations] = useState(false);
-  
   const [error, setError] = useState<string | null>(null);
-
-  // File Upload Ref
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Saved Data State
+  const [isSaved, setIsSaved] = useState(false);
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
-  // State for viewing a saved word in detail (reuse SentencesModal logic)
+  const [isWordsLoading, setIsWordsLoading] = useState(false);
   const [viewingSavedWord, setViewingSavedWord] = useState<SavedWord | null>(null);
 
-  // Load saved words on mount
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchWords = async () => {
+    setIsWordsLoading(true);
+    const words = await getSavedWords();
+    setSavedWords(words);
+    setIsWordsLoading(false);
+  };
+
   useEffect(() => {
-    setSavedWords(getSavedWords());
+    fetchWords();
   }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    }
+    localStorage.setItem('thaisnap_theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('thaisnap_lang', language);
+  }, [language]);
+
+  const checkSavedStatus = useCallback(async (word: string) => {
+    const saved = await isWordSaved(word);
+    setIsSaved(saved);
+  }, []);
+
+  useEffect(() => {
+    if (scanResults[selectedObjectIndex]) {
+        checkSavedStatus(scanResults[selectedObjectIndex].english);
+    }
+  }, [scanResults, selectedObjectIndex, checkSavedStatus]);
 
   const handleTabChange = (tab: Tab) => {
     setCurrentTab(tab);
-    // Remove automatic state reset to persist Home state
-    if (tab !== Tab.SAVED) {
-      setViewingSavedWord(null);
-    }
-  };
-
-  const startScanning = () => {
-    setAppState(AppState.CAMERA);
-    setError(null);
-  };
-
-  // Trigger the hidden file input
-  const triggerFileUpload = () => {
-    setError(null);
-    fileInputRef.current?.click();
-  };
-
-  // Handle file selection from gallery
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Reset input so valid change is detected if same file is selected again
-    event.target.value = '';
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
-      handleImageCaptured(base64);
-    };
-    reader.readAsDataURL(file);
+    if (tab !== Tab.SAVED) setViewingSavedWord(null);
+    if (tab === Tab.SAVED || tab === Tab.FLASHCARDS || tab === Tab.PRACTICE) fetchWords();
   };
 
   const handleImageCaptured = useCallback(async (imageSrc: string) => {
     setCapturedImage(imageSrc);
     setAppState(AppState.ANALYZING);
-
     try {
       const results = await identifyObjects(imageSrc.split(',')[1]); 
-      
-      if (results.length === 0) {
-        throw new Error("No objects found");
-      }
-
+      if (results.length === 0) throw new Error("No objects found");
       setScanResults(results);
       setSelectedObjectIndex(0); 
-      setSentences(null); // Reset sentences from previous scan
-      // We don't wipe the cache entirely, we just won't have the new word yet
+      setSentences(null);
       setAppState(AppState.RESULT);
     } catch (err) {
-      console.error(err);
-      setError("ไม่สามารถระบุวัตถุได้ ลองใหม่อีกครั้ง");
+      setError(language === 'th' ? "ไม่สามารถระบุวัตถุได้ ลองใหม่อีกครั้ง" : "Could not identify objects. Try again.");
       setAppState(AppState.HOME);
     }
-  }, []);
+  }, [language]);
 
   const handleShowSentences = useCallback(async () => {
     if (scanResults.length === 0) return;
-    
     const currentObject = scanResults[selectedObjectIndex];
     setAppState(AppState.SENTENCES_LOADING);
-    
     try {
       const result = await generateSentences(currentObject.english, currentObject.thai);
       setSentences(result);
       setAppState(AppState.SENTENCES_VIEW);
     } catch (err) {
-      console.error(err);
-      setError("เกิดข้อผิดพลาดในการสร้างประโยค");
+      setError(language === 'th' ? "เกิดข้อผิดพลาดในการสร้างประโยค" : "Error generating sentences.");
       setAppState(AppState.RESULT);
     }
-  }, [scanResults, selectedObjectIndex]);
+  }, [scanResults, selectedObjectIndex, language]);
 
-  // Fetches associations without changing the full screen view (Inline Loading)
   const handleLoadAssociationsInline = useCallback(async () => {
     if (scanResults.length === 0) return;
     const currentObject = scanResults[selectedObjectIndex];
-
     if (relatedWordsCache[currentObject.english]) return;
-
     setIsLoadingAssociations(true);
     try {
         const result = await generateRelatedVocabulary(currentObject.english);
-        setRelatedWordsCache(prev => ({
-            ...prev,
-            [currentObject.english]: result
-        }));
-    } catch (err) {
-        console.error(err);
-        // We don't verify strict error here for inline elements to avoid blocking UI
-    } finally {
-        setIsLoadingAssociations(false);
-    }
+        setRelatedWordsCache(prev => ({ ...prev, [currentObject.english]: result }));
+    } catch (err) { console.error(err); } finally { setIsLoadingAssociations(false); }
   }, [scanResults, selectedObjectIndex, relatedWordsCache]);
 
-  // Auto-trigger association loading when in Result view
   useEffect(() => {
-    if (appState === AppState.RESULT && scanResults.length > 0) {
-        handleLoadAssociationsInline();
-    }
+    if (appState === AppState.RESULT && scanResults.length > 0) handleLoadAssociationsInline();
   }, [appState, scanResults, selectedObjectIndex, handleLoadAssociationsInline]);
 
-  const handleShowRelatedWords = useCallback(async () => {
-    if (scanResults.length === 0) return;
-    
-    // Use cache directly if available, logic handled in inline loader mostly
-    // But if user clicks before auto-load finishes, we just show loading state in modal
-    setAppState(AppState.RELATED_VIEW);
-    
-  }, [scanResults]);
-
-  const handleSaveObject = (obj: DetectedObject) => {
-    // Save current object, pass sentences if they exist in state
-    saveWord(obj.english, obj.thai, sentences || undefined);
-    setSavedWords(getSavedWords()); // Refresh list
+  const handleSaveObject = async (obj: DetectedObject) => {
+    const associations = relatedWordsCache[obj.english];
+    await saveWord(obj.english, obj.thai, sentences || undefined, associations);
+    setIsSaved(true);
+    fetchWords();
   };
 
-  const handleSaveSentences = () => {
-    // Save/Update from Sentence Modal
-    const currentObject = scanResults[selectedObjectIndex];
-    if (currentObject && sentences) {
-       saveWord(currentObject.english, currentObject.thai, sentences);
-       setSavedWords(getSavedWords());
-    }
+  const handleRemoveWord = async (id: string) => {
+    await removeWord(id);
+    fetchWords();
+    if (viewingSavedWord?.id === id) setViewingSavedWord(null);
   };
-  
-  const handleSaveSimpleWord = (en: string, th: string) => {
-      saveWord(en, th);
-      setSavedWords(getSavedWords());
-  };
-
-  const handleDeleteWord = (id: string) => {
-    const updated = removeWord(id);
-    setSavedWords(updated);
-    if (viewingSavedWord?.id === id) {
-        setViewingSavedWord(null);
-    }
-  };
-
-  const handleGenerateSentencesForSaved = async () => {
-      if (!viewingSavedWord) return;
-
-      try {
-          const sentences = await generateSentences(viewingSavedWord.english, viewingSavedWord.thai);
-          
-          // Save immediately
-          saveWord(viewingSavedWord.english, viewingSavedWord.thai, sentences);
-          
-          // Update local states
-          const updatedWords = getSavedWords();
-          setSavedWords(updatedWords);
-          
-          // Update the currently viewed word to show new sentences
-          const updatedWord = updatedWords.find(w => w.id === viewingSavedWord.id);
-          if (updatedWord) {
-              setViewingSavedWord(updatedWord);
-          }
-      } catch (err) {
-          console.error("Failed to generate", err);
-          alert("ไม่สามารถสร้างประโยคได้ กรุณาลองใหม่");
-      }
-  };
-
-  const resetApp = () => {
-    setAppState(AppState.HOME);
-    setCapturedImage(null);
-    setScanResults([]);
-    setSelectedObjectIndex(0);
-    setSentences(null);
-    // relatedWordsCache persists
-    setError(null);
-  };
-
-  const backToResult = () => {
-    setAppState(AppState.RESULT);
-  };
-
-  // --- RENDER LOGIC BY TAB ---
 
   const renderContent = () => {
-    // 1. SAVED TAB
-    if (currentTab === Tab.SAVED) {
-      // If viewing details of a saved word
-      if (viewingSavedWord) {
-         // Create a mock DetectedObject for the modal
-         const mockResult: DetectedObject = {
-             english: viewingSavedWord.english,
-             thai: viewingSavedWord.thai,
-             confidence: 1,
-             box_2d: [0,0,0,0]
-         };
+    if (currentTab === Tab.SETTINGS) {
+        return <SettingsView theme={theme} onThemeChange={setTheme} language={language} onLanguageChange={setLanguage} />;
+    }
 
+    if (currentTab === Tab.SAVED) {
+      if (viewingSavedWord) {
          return (
              <SentencesModal 
-                result={mockResult}
+                result={{ english: viewingSavedWord.english, thai: viewingSavedWord.thai, confidence: 1, box_2d: [0,0,0,0] }}
                 sentences={viewingSavedWord.sentences || null}
                 onBack={() => setViewingSavedWord(null)}
-                onSave={() => {}} // Already saved
+                onSave={() => {}} 
                 isSaved={true}
-                onGenerate={!viewingSavedWord.sentences ? handleGenerateSentencesForSaved : undefined}
              />
          );
       }
-
-      return <SavedList words={savedWords} onDelete={handleDeleteWord} onSelectWord={setViewingSavedWord} />;
+      return <SavedList words={savedWords} onDelete={handleRemoveWord} onSelectWord={setViewingSavedWord} />;
     }
 
-    // 2. FLASHCARDS TAB
-    if (currentTab === Tab.FLASHCARDS) {
-      return <Flashcards words={savedWords} />;
-    }
+    if (currentTab === Tab.FLASHCARDS) return <Flashcards words={savedWords} />;
+    if (currentTab === Tab.PRACTICE) return <PracticeHub words={savedWords} />;
 
-    // 3. PRACTICE TAB
-    if (currentTab === Tab.PRACTICE) {
-      return <PracticeHub words={savedWords} />;
-    }
+    if (appState === AppState.CAMERA) return <Camera onCapture={handleImageCaptured} onBack={() => setAppState(AppState.HOME)} />;
 
-    // 4. HOME TAB (Scanning Flow)
-    // 4.1 Camera View
-    if (appState === AppState.CAMERA) {
-      return <Camera onCapture={handleImageCaptured} onBack={resetApp} />;
-    }
-
-    // 4.2 Analyzing
     if (appState === AppState.ANALYZING) {
       return (
         <div className="relative h-full w-full bg-slate-900">
-          {capturedImage && (
-            <img src={capturedImage} alt="analyzing" className="w-full h-full object-cover opacity-30" />
-          )}
+          {capturedImage && <img src={capturedImage} alt="analyzing" className="w-full h-full object-cover opacity-30" />}
           <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-white text-lg font-thai animate-pulse">กำลังวิเคราะห์วัตถุ...</p>
+            <p className={`text-white text-lg animate-pulse ${language === 'th' ? 'font-thai' : ''}`}>
+              {language === 'th' ? 'กำลังวิเคราะห์วัตถุ...' : 'Analyzing objects...'}
+            </p>
           </div>
         </div>
       );
     }
 
-    // 4.3 Result View
     if (appState === AppState.RESULT && capturedImage && scanResults.length > 0) {
-      const currentObj = scanResults[selectedObjectIndex];
-      const isSaved = isWordSaved(currentObj.english);
-      const associations = relatedWordsCache[currentObj.english];
-      
       return (
         <ResultView 
-          imageSrc={capturedImage} 
-          results={scanResults}
-          selectedIndex={selectedObjectIndex}
-          onSelect={setSelectedObjectIndex}
-          onClose={resetApp} 
-          onShowSentences={handleShowSentences}
-          onShowRelated={handleShowRelatedWords}
+          imageSrc={capturedImage} results={scanResults} selectedIndex={selectedObjectIndex}
+          onSelect={setSelectedObjectIndex} onClose={() => setAppState(AppState.HOME)} onShowSentences={handleShowSentences}
+          onShowRelated={() => setAppState(AppState.RELATED_VIEW)}
           onSave={handleSaveObject}
           isSaved={isSaved}
-          associations={associations}
+          associations={relatedWordsCache[scanResults[selectedObjectIndex].english]}
           onLoadAssociations={handleLoadAssociationsInline}
           isLoadingAssociations={isLoadingAssociations}
         />
       );
     }
 
-    // 4.4 Loading States (Sentences or Related)
-    if (appState === AppState.SENTENCES_LOADING || appState === AppState.RELATED_LOADING) {
-        const text = appState === AppState.SENTENCES_LOADING ? "กำลังแต่งประโยคตัวอย่าง..." : "กำลังคัดสรรคำศัพท์...";
-        const title = appState === AppState.SENTENCES_LOADING ? "Generating Sentences" : "Curating Vocabulary";
-        
-      return (
-         <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center space-y-6">
-            <div className="relative">
-               <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20 rounded-full"></div>
-               <SparklesIcon className="w-16 h-16 text-indigo-400 relative z-10 animate-pulse" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-semibold text-white">{title}</h3>
-              <p className="text-slate-400 font-thai">{text}</p>
-            </div>
-            <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden">
-               <div className="h-full bg-indigo-500 animate-progress"></div>
-            </div>
-         </div>
-      );
-    }
-
-    // 4.5 Sentences View
     if (appState === AppState.SENTENCES_VIEW && sentences && scanResults.length > 0) {
-      const currentObj = scanResults[selectedObjectIndex];
-      const isSaved = isWordSaved(currentObj.english);
-
-      return (
-        <SentencesModal 
-          result={currentObj} 
-          sentences={sentences} 
-          onBack={backToResult}
-          onSave={handleSaveSentences}
-          isSaved={isSaved}
-        />
-      );
+        return (
+          <SentencesModal 
+            result={scanResults[selectedObjectIndex]} sentences={sentences} 
+            onBack={() => setAppState(AppState.RESULT)}
+            onSave={() => handleSaveObject(scanResults[selectedObjectIndex])}
+            isSaved={isSaved}
+          />
+        );
     }
 
-    // 4.6 Related Words View
     if (appState === AppState.RELATED_VIEW && scanResults.length > 0) {
         const currentObj = scanResults[selectedObjectIndex];
         const associations = relatedWordsCache[currentObj.english];
-        
-        // If not loaded yet (should be rare due to auto-load), show loading skeleton or similar
-        // But for safety, check if associations exist
-        if (!associations) {
-            // Fallback: If for some reason auto-load failed or is slow, we trigger it again or show loader
-            // For now, let's just return null and wait for the useEffect to kick in or complete
-            return (
-                 <div className="h-full w-full bg-slate-900 flex items-center justify-center">
-                    <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                 </div>
-            );
-        }
-
-        // Collect only related nouns for this view (verbs are now in ResultView)
-        const savedMap: {[key: string]: boolean} = {};
-        associations.relatedWords.forEach(w => {
-            savedMap[w.english.toLowerCase()] = isWordSaved(w.english);
-        });
-
         return (
             <RelatedWordsModal
                 originalObject={currentObj}
-                associations={associations}
-                onBack={backToResult}
-                onSaveWord={handleSaveSimpleWord}
-                savedStatus={savedMap}
+                associations={associations!}
+                onBack={() => setAppState(AppState.RESULT)}
+                onSaveWord={async (en, th) => { await saveWord(en, th); fetchWords(); }}
+                savedStatus={Object.fromEntries(savedWords.map(w => [w.english.toLowerCase(), true]))}
             />
         );
     }
 
-    // 4.7 Default Home Screen
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-900 relative overflow-hidden pb-24">
-        {/* Background blobs */}
-        <div className="absolute top-0 -left-10 w-72 h-72 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute bottom-0 -right-10 w-72 h-72 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+      <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900 relative overflow-hidden pb-24 transition-colors duration-500">
+        <div className="absolute top-0 -left-10 w-72 h-72 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 dark:opacity-20 animate-blob"></div>
+        <div className="absolute bottom-0 -right-10 w-72 h-72 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 dark:opacity-20 animate-blob animation-delay-2000"></div>
 
         <div className="relative z-10 text-center space-y-8">
-          <div className="inline-flex p-4 bg-slate-800 rounded-2xl shadow-xl ring-1 ring-slate-700">
-            <SparklesIcon className="w-12 h-12 text-indigo-400" />
+          <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-xl ring-1 ring-slate-200 dark:ring-slate-700">
+            <SparklesIcon className="w-12 h-12 text-indigo-500" />
           </div>
           
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-purple-300">
-              ThaiSnap Lingo
-            </h1>
-            <p className="text-slate-400 font-thai text-lg">
-              เรียนภาษาอังกฤษจากสิ่งรอบตัว
+            <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-indigo-800 dark:from-indigo-300 dark:to-purple-300">ThaiSnap Lingo</h1>
+            <p className={`text-slate-500 dark:text-slate-400 text-lg ${language === 'th' ? 'font-thai' : ''}`}>
+              {language === 'th' ? 'เรียนภาษาอังกฤษจากสิ่งรอบตัว' : 'Learn English from your surroundings'}
             </p>
           </div>
 
-          {error && (
-             <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm font-thai">
-                {error}
-             </div>
-          )}
-
           <div className="flex items-center gap-4 w-full max-w-xs">
-            {/* Hidden File Input */}
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/*" 
-                onChange={handleFileUpload}
-            />
-
-            {/* Main Scan Button */}
+            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => handleImageCaptured(reader.result as string);
+                reader.readAsDataURL(file);
+              }
+            }} />
             <button
-                onClick={startScanning}
-                className="group flex-1 flex items-center justify-center space-x-2 bg-white text-slate-900 py-4 px-6 rounded-full font-bold text-lg shadow-lg hover:shadow-indigo-500/20 hover:scale-105 transition-all duration-300"
+                onClick={() => setAppState(AppState.CAMERA)}
+                className="group flex-1 flex items-center justify-center space-x-2 bg-indigo-600 text-white py-4 px-6 rounded-full font-bold text-lg shadow-lg hover:shadow-indigo-500/30 hover:scale-105 transition-all duration-300"
             >
-                <CameraIcon className="w-6 h-6 text-indigo-600 group-hover:rotate-12 transition-transform" />
-                <span className="font-thai">สแกนเลย</span>
+                <CameraIcon className="w-6 h-6" />
+                <span className={language === 'th' ? 'font-thai' : ''}>{language === 'th' ? 'สแกนเลย' : 'Scan Now'}</span>
             </button>
-
-            {/* Upload Button */}
             <button
-                onClick={triggerFileUpload}
-                className="bg-slate-800 text-slate-300 hover:text-white p-4 rounded-full border border-slate-700 hover:bg-slate-700 hover:border-indigo-500 transition-all shadow-lg active:scale-95"
-                title="เลือกจากแกลเลอรี"
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 p-4 rounded-full border border-slate-200 dark:border-slate-700 shadow-lg active:scale-95 transition-all"
             >
                 <PhotoIcon className="w-6 h-6" />
             </button>
@@ -438,12 +268,10 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-slate-900 text-white relative">
+    <div className={`h-full w-full bg-slate-50 dark:bg-slate-900 transition-colors duration-500`}>
       {renderContent()}
-      
-      {/* Hide NavBar if in Camera mode or full screen modals to avoid clutter */}
-      {appState !== AppState.CAMERA && appState !== AppState.SENTENCES_VIEW && appState !== AppState.RELATED_VIEW && !viewingSavedWord && (
-        <NavBar currentTab={currentTab} onTabChange={handleTabChange} />
+      {(appState === AppState.HOME || currentTab !== Tab.HOME || appState === AppState.RESULT) && (
+        <NavBar currentTab={currentTab} onTabChange={handleTabChange} language={language} />
       )}
     </div>
   );

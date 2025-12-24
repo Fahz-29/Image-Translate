@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DetectedObject, WordAssociations } from '../types';
-import { BookOpenIcon, XMarkIcon, SpeakerIcon, BookmarkIcon, ChevronDownIcon, ChevronUpIcon, PuzzleIcon, SparklesIcon } from './Icons';
+import { BookOpenIcon, XMarkIcon, SpeakerIcon, BookmarkIcon, ChevronDownIcon, ChevronUpIcon, SquaresPlusIcon, SparklesIcon } from './Icons';
 
 interface ResultViewProps {
   imageSrc: string;
@@ -252,7 +252,7 @@ const ResultView: React.FC<ResultViewProps> = ({
                         onClick={onShowRelated}
                         className="flex-1 bg-slate-700 text-white hover:bg-slate-600 border border-slate-700 py-3.5 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-[0.98] shadow-lg"
                     >
-                        <PuzzleIcon className="w-5 h-5 text-indigo-300" />
+                        <SquaresPlusIcon className="w-5 h-5 text-indigo-300" />
                         <span className="font-thai">ศัพท์ใกล้เคียง</span>
                     </button>
                 </div>

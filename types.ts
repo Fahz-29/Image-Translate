@@ -73,5 +73,8 @@ export enum Tab {
   HOME = 'HOME',
   SAVED = 'SAVED',
   FLASHCARDS = 'FLASHCARDS',
-  PRACTICE = 'PRACTICE'
+  PRACTICE = 'PRACTICE',
+  SETTINGS = 'SETTINGS'
 }
+
+export type Language = 'th' | 'en';

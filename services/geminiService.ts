@@ -1,26 +1,20 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { DetectedObject, SentenceExamples, QuizQuestion, PronunciationResult, WordAssociations } from "../types";
 
-// Lazy initialization of Gemini Client
-let aiClient: GoogleGenAI | null = null;
+// Always select recommended models based on task type according to @google/genai guidelines.
+const TEXT_MODEL = 'gemini-3-flash-preview';
+const IMAGE_MODEL = 'gemini-2.5-flash-image';
+const AUDIO_MODEL = 'gemini-2.5-flash-native-audio-preview-09-2025';
 
-const getAiClient = () => {
-  if (!aiClient) {
-    // If API_KEY is missing, use a placeholder to prevent immediate crash,
-    // the API call will simply fail later with a clear error.
-    const apiKey = process.env.API_KEY || "MISSING_API_KEY";
-    aiClient = new GoogleGenAI({ apiKey });
-  }
-  return aiClient;
-}
-
-const modelName = "gemini-2.5-flash";
+// FIX: Initializing fresh instance within requests to avoid stale API keys and follow guidelines.
+const getAi = () => new GoogleGenAI({ apiKey: process.env.API_KEY || "MISSING_API_KEY" });
 
 export const identifyObjects = async (base64Image: string): Promise<DetectedObject[]> => {
   try {
-    const ai = getAiClient();
+    const ai = getAi();
     
-    const responseSchema: Schema = {
+    // Using Type directly as recommended.
+    const responseSchema = {
       type: Type.OBJECT,
       properties: {
         objects: {
@@ -49,7 +43,7 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
     };
 
     const response = await ai.models.generateContent({
-      model: modelName,
+      model: IMAGE_MODEL,
       contents: {
         parts: [
           {
@@ -69,6 +63,7 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
       },
     });
 
+    // Property text returns string, not a method.
     const text = response.text;
     if (!text) throw new Error("No response from AI");
     
@@ -83,9 +78,9 @@ export const identifyObjects = async (base64Image: string): Promise<DetectedObje
 
 export const generateSentences = async (englishName: string, thaiName: string): Promise<SentenceExamples> => {
   try {
-    const ai = getAiClient();
+    const ai = getAi();
     
-    const responseSchema: Schema = {
+    const responseSchema = {
       type: Type.OBJECT,
       properties: {
         past: {
@@ -126,7 +121,7 @@ export const generateSentences = async (englishName: string, thaiName: string): 
     `;
 
     const response = await ai.models.generateContent({
-      model: modelName,
+      model: TEXT_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -146,8 +141,8 @@ export const generateSentences = async (englishName: string, thaiName: string): 
 
 export const generateRelatedVocabulary = async (word: string): Promise<WordAssociations> => {
     try {
-        const ai = getAiClient();
-        const responseSchema: Schema = {
+        const ai = getAi();
+        const responseSchema = {
             type: Type.OBJECT,
             properties: {
                 relatedWords: {
@@ -190,7 +185,7 @@ export const generateRelatedVocabulary = async (word: string): Promise<WordAssoc
         Provide Thai translations and a very short definition/context in Thai for each.`;
 
         const response = await ai.models.generateContent({
-            model: modelName,
+            model: TEXT_MODEL,
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -209,8 +204,8 @@ export const generateRelatedVocabulary = async (word: string): Promise<WordAssoc
 
 export const generateGrammarQuiz = async (word: string, difficulty: string): Promise<QuizQuestion> => {
     try {
-        const ai = getAiClient();
-        const responseSchema: Schema = {
+        const ai = getAi();
+        const responseSchema = {
             type: Type.OBJECT,
             properties: {
                 question: { type: Type.STRING, description: "The sentence with a blank or error" },
@@ -229,7 +224,7 @@ export const generateGrammarQuiz = async (word: string, difficulty: string): Pro
         Provide 4 options and a clear explanation in Thai/English mixed.`;
 
         const response = await ai.models.generateContent({
-            model: modelName,
+            model: TEXT_MODEL,
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -249,8 +244,8 @@ export const generateGrammarQuiz = async (word: string, difficulty: string): Pro
 
 export const generateBatchGrammarQuiz = async (words: string[], difficulty: string): Promise<QuizQuestion[]> => {
     try {
-        const ai = getAiClient();
-        const responseSchema: Schema = {
+        const ai = getAi();
+        const responseSchema = {
             type: Type.ARRAY,
             items: {
                 type: Type.OBJECT,
@@ -273,7 +268,7 @@ export const generateBatchGrammarQuiz = async (words: string[], difficulty: stri
         Provide 4 options and a clear explanation in Thai/English mixed for each.`;
 
         const response = await ai.models.generateContent({
-            model: modelName,
+            model: TEXT_MODEL,
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -293,8 +288,8 @@ export const generateBatchGrammarQuiz = async (words: string[], difficulty: stri
 
 export const analyzePronunciation = async (audioBase64: string, targetSentence: string): Promise<PronunciationResult> => {
     try {
-        const ai = getAiClient();
-        const responseSchema: Schema = {
+        const ai = getAi();
+        const responseSchema = {
             type: Type.OBJECT,
             properties: {
                 score: { type: Type.NUMBER, description: "Score from 0 to 100. Return 0 if no clear speech is detected." },
@@ -306,12 +301,12 @@ export const analyzePronunciation = async (audioBase64: string, targetSentence: 
         };
 
         const response = await ai.models.generateContent({
-            model: modelName,
+            model: AUDIO_MODEL,
             contents: {
                 parts: [
                     {
                         inlineData: {
-                            mimeType: "audio/webm", // Browser media recorder usually outputs webm/mp4
+                            mimeType: "audio/webm", // Standard audio formats are supported for Unary generateContent.
                             data: audioBase64
                         }
                     },

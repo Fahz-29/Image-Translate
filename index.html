@@ -1,13 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>ThaiSnap Lingo</title>
-    <!-- We keep the CDN for Tailwind for simplicity, though moving to PostCSS is recommended for production -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            // No custom colors needed as we use slate and indigo
+          }
+        }
+      }
+    </script>
     <style>
+      * {
+        transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+      }
       body {
         font-family: 'Inter', sans-serif;
       }
@@ -22,6 +34,12 @@
         animation: scan 3s linear infinite;
         box-shadow: 0 0 15px 2px rgba(99, 102, 241, 0.5);
       }
+      /* Custom Light Mode Overrides for Tailwind classes */
+      .light .light\:bg-slate-50 { background-color: #f8fafc; }
+      .light .light\:bg-white { background-color: #ffffff; }
+      .light .light\:text-slate-900 { color: #0f172a; }
+      .light .light\:text-slate-500 { color: #64748b; }
+      .light .light\:border-slate-200 { border-color: #e2e8f0; }
     </style>
   <script type="importmap">
 {
@@ -36,9 +54,8 @@
 }
 </script>
 </head>
-  <body class="bg-slate-900 text-white overflow-hidden">
+  <body class="bg-slate-900 text-white dark:bg-slate-900 dark:text-white light:bg-slate-50 light:text-slate-900 overflow-hidden transition-colors duration-500">
     <div id="root" class="h-full w-full absolute inset-0"></div>
-    <!-- Vite entry point -->
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
