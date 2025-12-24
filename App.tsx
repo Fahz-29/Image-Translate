@@ -92,7 +92,8 @@ const App: React.FC = () => {
     } else {
       setErrorMessage(err.message || "เกิดข้อผิดพลาด");
     }
-    setAppState(AppState.HOME);
+    // Don't auto-reset state if we are showing a save error
+    if (appState === AppState.ANALYZING) setAppState(AppState.HOME);
     setIsTranslating(false);
   };
 
@@ -197,12 +198,14 @@ const App: React.FC = () => {
 
   const handleSaveObject = async (obj: DetectedObject) => {
     const associations = relatedWordsCache[obj.english];
-    const saved = await saveWord(obj.english, obj.thai, sentences || undefined, associations, obj.imageUrls);
-    if (saved) {
+    const { data, error } = await saveWord(obj.english, obj.thai, sentences || undefined, associations, obj.imageUrls);
+    
+    if (data) {
         setIsSaved(true);
-        await fetchWords(); // รีเฟรชรายการคำศัพท์ทันที
-    } else {
-        setErrorMessage("ไม่สามารถบันทึกข้อมูลได้ กรุณาตรวจสอบการตั้งค่า Supabase");
+        await fetchWords();
+        setErrorMessage(null);
+    } else if (error) {
+        setErrorMessage(error);
     }
   };
 
@@ -291,7 +294,7 @@ const App: React.FC = () => {
                 originalObject={currentObj}
                 associations={associations!}
                 onBack={() => setAppState(AppState.RESULT)}
-                onSaveWord={async (en, th) => { const saved = await saveWord(en, th); if (saved) fetchWords(); }}
+                onSaveWord={async (en, th) => { const { data } = await saveWord(en, th); if (data) fetchWords(); }}
                 savedStatus={Object.fromEntries(savedWords.map(w => [w.english.toLowerCase(), true]))}
             />
         );

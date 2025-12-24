@@ -17,7 +17,11 @@ export const getSavedWords = async (): Promise<SavedWord[]> => {
     }
     
     return (data || []).map(w => ({
-        ...w,
+        id: w.id,
+        thai: w.thai,
+        english: w.english,
+        sentences: w.sentences,
+        associations: w.associations,
         imageUrls: w.image_urls || [], 
         timestamp: w.timestamp ? new Date(w.timestamp).getTime() : Date.now()
     }));
@@ -27,30 +31,36 @@ export const getSavedWords = async (): Promise<SavedWord[]> => {
   }
 };
 
+/**
+ * บันทึกคำศัพท์
+ * คืนค่าเป็น Object ที่มี data (SavedWord) หรือ error (string)
+ */
 export const saveWord = async (
   english: string, 
   thai: string, 
   sentences?: SentenceExamples, 
   associations?: WordAssociations,
   imageUrls?: string[]
-): Promise<SavedWord | null> => {
+): Promise<{ data: SavedWord | null, error: string | null }> => {
   try {
-    // ใช้ maybeSingle() เพื่อไม่ให้พังถ้าหาไม่เจอ
+    // 1. ตรวจสอบว่ามีคำนี้อยู่แล้วหรือไม่ (Case Insensitive)
     const { data: existing } = await supabase
       .from('words')
       .select('*')
-      .eq('english', english)
+      .ilike('english', english)
       .maybeSingle();
 
-    const payload = {
-      english,
+    // 2. เตรียมข้อมูล
+    const payload: any = {
+      english: english.toLowerCase(),
       thai,
       sentences: sentences || (existing ? existing.sentences : null),
       associations: associations || (existing ? existing.associations : null),
-      image_urls: imageUrls || (existing ? existing.image_urls : []),
+      image_urls: imageUrls || (existing?.image_urls) || [],
       timestamp: new Date().toISOString()
     };
 
+    let finalData;
     if (existing) {
       const { data, error } = await supabase
         .from('words')
@@ -60,7 +70,7 @@ export const saveWord = async (
         .single();
       
       if (error) throw error;
-      return { ...data, imageUrls: data.image_urls };
+      finalData = data;
     } else {
       const { data, error } = await supabase
         .from('words')
@@ -69,11 +79,26 @@ export const saveWord = async (
         .single();
       
       if (error) throw error;
-      return { ...data, imageUrls: data.image_urls };
+      finalData = data;
     }
+
+    return { 
+      data: { ...finalData, imageUrls: finalData.image_urls || [] }, 
+      error: null 
+    };
   } catch (err: any) {
-    console.error("Supabase SAVE Error:", err.message || err);
-    return null;
+    const errorMsg = err.message || "Unknown error";
+    console.error("❌ Supabase Save Failure:", errorMsg);
+    
+    // แจ้งเตือนสาเหตุที่เจอบ่อย
+    if (errorMsg.includes('column "image_urls" does not exist')) {
+        return { data: null, error: "Database Error: กรุณารัน SQL เพิ่มคอลัมน์ image_urls ใน Supabase" };
+    }
+    if (errorMsg.includes('FetchError') || errorMsg.includes('Failed to fetch')) {
+        return { data: null, error: "Network Error: ไม่สามารถเชื่อมต่อกับ Supabase ได้ (ตรวจสอบ URL/Key ใน Vercel)" };
+    }
+    
+    return { data: null, error: `Supabase Error: ${errorMsg}` };
   }
 };
 
@@ -92,10 +117,11 @@ export const removeWord = async (id: string): Promise<boolean> => {
 
 export const isWordSaved = async (english: string): Promise<boolean> => {
     try {
+        if (!english) return false;
         const { data } = await supabase
           .from('words')
           .select('id')
-          .eq('english', english)
+          .ilike('english', english)
           .maybeSingle();
         return !!data;
     } catch {
@@ -113,7 +139,8 @@ export const getDecks = async (): Promise<Deck[]> => {
   
   if (error) return [];
   return (data || []).map(d => ({
-      ...d,
+      id: d.id,
+      name: d.name,
       wordIds: d.word_ids || [],
       createdAt: new Date(d.created_at).getTime()
   }));
@@ -128,7 +155,8 @@ export const saveDeck = async (name: string, wordIds: string[]): Promise<Deck | 
   
   if (error) return null;
   return {
-      ...data,
+      id: data.id,
+      name: data.name,
       wordIds: data.word_ids,
       createdAt: new Date(data.created_at).getTime()
   };
