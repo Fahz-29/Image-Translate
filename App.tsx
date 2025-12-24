@@ -318,7 +318,7 @@ const App: React.FC = () => {
                 {errorMessage.includes('DATABASE_SCHEMA_ERROR') && (
                   <div className="bg-black/20 p-3 rounded-2xl w-full text-left space-y-2">
                      <p className="text-[10px] font-black uppercase tracking-widest text-white/70">วิธีแก้ไขด่วน:</p>
-                     <p className="text-[11px] font-thai">1. ไปที่ Supabase > SQL Editor</p>
+                     <p className="text-[11px] font-thai">1. ไปที่ Supabase &gt; SQL Editor</p>
                      <p className="text-[11px] font-thai">2. รันคำสั่ง: <code className="bg-black/40 px-1 py-0.5 rounded">ALTER TABLE words ADD COLUMN image_urls TEXT[];</code></p>
                   </div>
                 )}
