@@ -12,9 +12,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       // This maps the server-side environment variables to the client-side code
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL),
-      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY),
+      'process.env.API_KEY': "AIzaSyAYO3-je4BjKenu0swJUH000dmUMNQmQK0",
+      'process.env.SUPABASE_URL': "https://kaghnkhyylftabxuxdxn.supabase.co",
+      'process.env.SUPABASE_ANON_KEY': "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthZ2hua2h5eWxmdGFieHV4ZHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MzUyOTMsImV4cCI6MjA4MjExMTI5M30.388Buh9KT5OOxiiYdFqz6SnQgnNExzfDr3hOpEa3ea0",
     },
     build: {
       outDir: 'dist',
