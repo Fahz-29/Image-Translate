@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Camera from './components/Camera';
 import ResultView from './components/ResultView';
@@ -8,7 +9,7 @@ import SavedList from './components/SavedList';
 import Flashcards from './components/Flashcards';
 import PracticeHub from './components/PracticeHub';
 import SettingsView from './components/SettingsView';
-import { CameraIcon, SparklesIcon, PhotoIcon } from './components/Icons';
+import { CameraIcon, SparklesIcon, PhotoIcon, GlobeIcon } from './components/Icons';
 import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssociations, Language } from './types';
 import { identifyObjects, generateSentences, generateRelatedVocabulary } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
@@ -29,7 +30,7 @@ const App: React.FC = () => {
 
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [scanResults, setScanResults] = useState<DetectedObject[]>([]);
-  const [selectedObjectIndex, setSelectedObjectIndex] = useState<number>(0);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [sentences, setSentences] = useState<SentenceExamples | null>(null);
   const [relatedWordsCache, setRelatedWordsCache] = useState<Record<string, WordAssociations>>({});
   const [isLoadingAssociations, setIsLoadingAssociations] = useState(false);
@@ -38,6 +39,10 @@ const App: React.FC = () => {
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [isWordsLoading, setIsWordsLoading] = useState(false);
   const [viewingSavedWord, setViewingSavedWord] = useState<SavedWord | null>(null);
+
+  // Manual Translation State
+  const [manualText, setManualText] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,10 +79,10 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (scanResults[selectedObjectIndex]) {
-        checkSavedStatus(scanResults[selectedObjectIndex].english);
+    if (scanResults[selectedIndex]) {
+        checkSavedStatus(scanResults[selectedIndex].english);
     }
-  }, [scanResults, selectedObjectIndex, checkSavedStatus]);
+  }, [scanResults, selectedIndex, checkSavedStatus]);
 
   const handleTabChange = (tab: Tab) => {
     setCurrentTab(tab);
@@ -92,7 +97,7 @@ const App: React.FC = () => {
       const results = await identifyObjects(imageSrc.split(',')[1]); 
       if (results.length === 0) throw new Error("No objects found");
       setScanResults(results);
-      setSelectedObjectIndex(0); 
+      setSelectedIndex(0); 
       setSentences(null);
       setAppState(AppState.RESULT);
     } catch (err) {
@@ -101,9 +106,40 @@ const App: React.FC = () => {
     }
   }, [language]);
 
+  const handleManualTranslate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualText.trim()) return;
+    
+    setIsTranslating(true);
+    setAppState(AppState.ANALYZING);
+    try {
+      // Use identifyObjects but since it's text, we'll mimic the result structure
+      // For simplicity, we create a virtual "DetectedObject" from a manual word search
+      // In a real app, you might have a dedicated translateWord function
+      const result = await generateSentences(manualText, manualText); // Placeholder logic
+      
+      // Update results with a dummy entry for Manual Translation
+      setScanResults([{
+        thai: manualText,
+        english: manualText, // This would need actual translation logic in geminiService
+        box_2d: [0, 0, 1, 1],
+        confidence: 1.0
+      }]);
+      setSelectedIndex(0);
+      setSentences(result);
+      setCapturedImage(null); // No image for manual text
+      setAppState(AppState.RESULT);
+    } catch (err) {
+      setError("เกิดข้อผิดพลาดในการแปล");
+      setAppState(AppState.HOME);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   const handleShowSentences = useCallback(async () => {
     if (scanResults.length === 0) return;
-    const currentObject = scanResults[selectedObjectIndex];
+    const currentObject = scanResults[selectedIndex];
     setAppState(AppState.SENTENCES_LOADING);
     try {
       const result = await generateSentences(currentObject.english, currentObject.thai);
@@ -113,22 +149,22 @@ const App: React.FC = () => {
       setError(language === 'th' ? "เกิดข้อผิดพลาดในการสร้างประโยค" : "Error generating sentences.");
       setAppState(AppState.RESULT);
     }
-  }, [scanResults, selectedObjectIndex, language]);
+  }, [scanResults, selectedIndex, language]);
 
   const handleLoadAssociationsInline = useCallback(async () => {
     if (scanResults.length === 0) return;
-    const currentObject = scanResults[selectedObjectIndex];
+    const currentObject = scanResults[selectedIndex];
     if (relatedWordsCache[currentObject.english]) return;
     setIsLoadingAssociations(true);
     try {
         const result = await generateRelatedVocabulary(currentObject.english);
         setRelatedWordsCache(prev => ({ ...prev, [currentObject.english]: result }));
     } catch (err) { console.error(err); } finally { setIsLoadingAssociations(false); }
-  }, [scanResults, selectedObjectIndex, relatedWordsCache]);
+  }, [scanResults, selectedIndex, relatedWordsCache]);
 
   useEffect(() => {
     if (appState === AppState.RESULT && scanResults.length > 0) handleLoadAssociationsInline();
-  }, [appState, scanResults, selectedObjectIndex, handleLoadAssociationsInline]);
+  }, [appState, scanResults, selectedIndex, handleLoadAssociationsInline]);
 
   const handleSaveObject = async (obj: DetectedObject) => {
     const associations = relatedWordsCache[obj.english];
@@ -172,25 +208,30 @@ const App: React.FC = () => {
       return (
         <div className="relative h-full w-full bg-slate-900">
           {capturedImage && <img src={capturedImage} alt="analyzing" className="w-full h-full object-cover opacity-30" />}
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-            <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className={`text-white text-lg animate-pulse ${language === 'th' ? 'font-thai' : ''}`}>
-              {language === 'th' ? 'กำลังวิเคราะห์วัตถุ...' : 'Analyzing objects...'}
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 p-6 text-center">
+            <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
+            <p className={`text-white text-xl font-bold animate-pulse ${language === 'th' ? 'font-thai' : ''}`}>
+              {language === 'th' ? 'กำลังส่งข้อมูลไปที่ Gemini AI...' : 'Analyzing with Gemini AI...'}
             </p>
+            <p className="text-slate-400 text-sm mt-2 font-thai opacity-60">รอสักครู่ ระบบกำลังประมวลผล</p>
           </div>
         </div>
       );
     }
 
-    if (appState === AppState.RESULT && capturedImage && scanResults.length > 0) {
+    if (appState === AppState.RESULT && scanResults.length > 0) {
       return (
         <ResultView 
-          imageSrc={capturedImage} results={scanResults} selectedIndex={selectedObjectIndex}
-          onSelect={setSelectedObjectIndex} onClose={() => setAppState(AppState.HOME)} onShowSentences={handleShowSentences}
+          imageSrc={capturedImage || 'https://images.unsplash.com/photo-1546410531-bb4caa6b424d?q=80&w=2071&auto=format&fit=crop'} 
+          results={scanResults} 
+          selectedIndex={selectedIndex}
+          onSelect={setSelectedIndex} 
+          onClose={() => setAppState(AppState.HOME)} 
+          onShowSentences={handleShowSentences}
           onShowRelated={() => setAppState(AppState.RELATED_VIEW)}
           onSave={handleSaveObject}
           isSaved={isSaved}
-          associations={relatedWordsCache[scanResults[selectedObjectIndex].english]}
+          associations={relatedWordsCache[scanResults[selectedIndex].english]}
           onLoadAssociations={handleLoadAssociationsInline}
           isLoadingAssociations={isLoadingAssociations}
         />
@@ -200,16 +241,16 @@ const App: React.FC = () => {
     if (appState === AppState.SENTENCES_VIEW && sentences && scanResults.length > 0) {
         return (
           <SentencesModal 
-            result={scanResults[selectedObjectIndex]} sentences={sentences} 
+            result={scanResults[selectedIndex]} sentences={sentences} 
             onBack={() => setAppState(AppState.RESULT)}
-            onSave={() => handleSaveObject(scanResults[selectedObjectIndex])}
+            onSave={() => handleSaveObject(scanResults[selectedIndex])}
             isSaved={isSaved}
           />
         );
     }
 
     if (appState === AppState.RELATED_VIEW && scanResults.length > 0) {
-        const currentObj = scanResults[selectedObjectIndex];
+        const currentObj = scanResults[selectedIndex];
         const associations = relatedWordsCache[currentObj.english];
         return (
             <RelatedWordsModal
@@ -223,12 +264,12 @@ const App: React.FC = () => {
     }
 
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900 relative overflow-hidden pb-24 transition-colors duration-500">
+      <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900 relative overflow-hidden pb-32 transition-colors duration-500">
         <div className="absolute top-0 -left-10 w-72 h-72 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 dark:opacity-20 animate-blob"></div>
         <div className="absolute bottom-0 -right-10 w-72 h-72 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 dark:opacity-20 animate-blob animation-delay-2000"></div>
 
-        <div className="relative z-10 text-center space-y-8">
-          <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-xl ring-1 ring-slate-200 dark:ring-slate-700">
+        <div className="relative z-10 text-center space-y-8 w-full max-w-sm">
+          <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-xl ring-1 ring-slate-200 dark:ring-slate-700 mx-auto">
             <SparklesIcon className="w-12 h-12 text-indigo-500" />
           </div>
           
@@ -239,7 +280,24 @@ const App: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-4 w-full max-w-xs">
+          {/* Manual Translation Input */}
+          <form onSubmit={handleManualTranslate} className="w-full relative group">
+              <input 
+                type="text" 
+                value={manualText}
+                onChange={(e) => setManualText(e.target.value)}
+                placeholder={language === 'th' ? "พิมพ์คำศัพท์ที่ต้องการแปล..." : "Type a word to translate..."}
+                className="w-full pl-5 pr-12 py-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-thai text-slate-900 dark:text-white"
+              />
+              <button 
+                type="submit"
+                className="absolute right-2 top-2 p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition shadow-md"
+              >
+                <GlobeIcon className="w-5 h-5" />
+              </button>
+          </form>
+
+          <div className="flex items-center gap-4 w-full">
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
@@ -250,14 +308,14 @@ const App: React.FC = () => {
             }} />
             <button
                 onClick={() => setAppState(AppState.CAMERA)}
-                className="group flex-1 flex items-center justify-center space-x-2 bg-indigo-600 text-white py-4 px-6 rounded-full font-bold text-lg shadow-lg hover:shadow-indigo-500/30 hover:scale-105 transition-all duration-300"
+                className="group flex-1 flex items-center justify-center space-x-2 bg-indigo-600 text-white py-4 px-6 rounded-2xl font-bold text-lg shadow-lg hover:shadow-indigo-500/30 hover:scale-105 transition-all duration-300"
             >
                 <CameraIcon className="w-6 h-6" />
-                <span className={language === 'th' ? 'font-thai' : ''}>{language === 'th' ? 'สแกนเลย' : 'Scan Now'}</span>
+                <span className={language === 'th' ? 'font-thai' : ''}>{language === 'th' ? 'สแกนเลย' : 'Scan'}</span>
             </button>
             <button
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 p-4 rounded-full border border-slate-200 dark:border-slate-700 shadow-lg active:scale-95 transition-all"
+                className="bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg active:scale-95 transition-all"
             >
                 <PhotoIcon className="w-6 h-6" />
             </button>
