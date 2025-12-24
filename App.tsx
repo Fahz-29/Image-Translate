@@ -11,7 +11,7 @@ import PracticeHub from './components/PracticeHub';
 import SettingsView from './components/SettingsView';
 import { CameraIcon, SparklesIcon, PhotoIcon, GlobeIcon, XMarkIcon, CheckBadgeIcon } from './components/Icons';
 import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssociations, Language } from './types';
-import { identifyObjects, generateSentences, generateRelatedVocabulary, getFullWordData } from './services/geminiService';
+import { identifyObjects, generateSentences, generateRelatedVocabulary, translateQuick, getRelatedImage } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
 
 const App: React.FC = () => {
@@ -36,6 +36,8 @@ const App: React.FC = () => {
   const [isLoadingAssociations, setIsLoadingAssociations] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState<string>('กำลังประมวลผล...');
+  
   const [isQuotaError, setIsQuotaError] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
@@ -85,7 +87,7 @@ const App: React.FC = () => {
     console.error("App Error:", err);
     if (err.message?.includes('429') || err.message?.includes('quota') || err.message?.includes('RESOURCE_EXHAUSTED')) {
       setIsQuotaError(true);
-      setErrorMessage("โควตาฟรีของแอปเต็มแล้ว! โปรดเลือกใช้ API Key ส่วนตัวเพื่อใช้งานต่อ");
+      setErrorMessage("โควตาเต็ม! โปรดใช้ Key ส่วนตัว");
     } else {
       setErrorMessage(err.message || "เกิดข้อผิดพลาด");
     }
@@ -104,6 +106,7 @@ const App: React.FC = () => {
   const handleImageCaptured = useCallback(async (imageSrc: string) => {
     setCapturedImage(imageSrc);
     setAppState(AppState.ANALYZING);
+    setLoadingStatus('กำลังวิเคราะห์วัตถุในภาพ...');
     setErrorMessage(null);
     setSuccessMessage(null);
     
@@ -112,7 +115,7 @@ const App: React.FC = () => {
       const results = await identifyObjects(base64Data); 
       
       if (!results || results.length === 0) {
-        throw new Error("NO_OBJECTS: ไม่พบวัตถุในภาพนี้");
+        throw new Error("NO_OBJECTS: ไม่พบวัตถุ");
       }
       
       setScanResults(results);
@@ -120,7 +123,7 @@ const App: React.FC = () => {
       setSentences(null);
       setAppState(AppState.RESULT);
 
-      // Background load details for the first found object immediately
+      // Background load details
       loadObjectDetailsInBackground(results[0].english, results[0].thai);
     } catch (err: any) {
       handleError(err);
@@ -146,31 +149,39 @@ const App: React.FC = () => {
     
     setIsTranslating(true);
     setAppState(AppState.ANALYZING);
+    setLoadingStatus('กำลังหาความหมาย...');
     setErrorMessage(null);
-    setSuccessMessage(null);
 
     try {
-      // Use the new combined function for speed
-      const fullData = await getFullWordData(manualText);
+      // 1. Get Translation FAST (Stage 1)
+      const trans = await translateQuick(manualText);
 
-      setCapturedImage(fullData.imageUrls[0]);
+      // 2. Set intermediate state and show ResultView immediately
       setScanResults([{
-        thai: fullData.thai,
-        english: fullData.english,
+        thai: trans.thai,
+        english: trans.english,
         box_2d: [0, 0, 1, 1],
         confidence: 1.0,
-        imageUrls: fullData.imageUrls
+        imageUrls: [] 
       }]);
-      
-      setRelatedWordsCache(prev => ({ ...prev, [fullData.english]: fullData.associations }));
       setSelectedIndex(0);
-      setSentences(fullData.sentences);
+      setSentences(null);
       setAppState(AppState.RESULT);
       setManualText(''); 
+      setIsTranslating(false);
+
+      // 3. Load Extra Data in Background (Stage 2)
+      // Fetch Image first as it's visual
+      getRelatedImage(trans.english).then(img => {
+          setCapturedImage(img);
+          setScanResults(prev => [{ ...prev[0], imageUrls: [img] }]);
+      });
+      
+      // Fetch Sentences and Vocab
+      loadObjectDetailsInBackground(trans.english, trans.thai);
+
     } catch (err: any) {
       handleError(err);
-    } finally {
-      setIsTranslating(false);
     }
   };
 
@@ -207,11 +218,9 @@ const App: React.FC = () => {
     if (data) {
         setIsSaved(true);
         await fetchWords();
-        if (schemaIncomplete) {
-          setErrorMessage("บันทึกสำเร็จแต่ไม่มีรูปภาพ (กรุณาอัปเดต DB)");
-        } else {
-          setSuccessMessage("บันทึกเรียบร้อย!");
-          setTimeout(() => setSuccessMessage(null), 2000);
+        if (!schemaIncomplete) {
+          setSuccessMessage("บันทึกแล้ว!");
+          setTimeout(() => setSuccessMessage(null), 1500);
         }
     } else if (error) {
         setErrorMessage(error);
@@ -256,9 +265,16 @@ const App: React.FC = () => {
 
     if (appState === AppState.ANALYZING) {
       return (
-        <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
-            <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
-            <p className="text-white text-xl font-bold font-thai animate-pulse">กำลังสแกนแบบอัจฉริยะ...</p>
+        <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center transition-all duration-300">
+            <div className="relative mb-8">
+                <div className="w-20 h-20 border-4 border-indigo-500/30 rounded-full" />
+                <div className="absolute top-0 w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                <SparklesIcon className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-indigo-400" />
+            </div>
+            <div className="space-y-3">
+                <p className="text-white text-2xl font-black font-thai animate-pulse">{loadingStatus}</p>
+                <p className="text-slate-500 text-sm font-thai">กำลังเรียกใช้พลังของ Gemini 3...</p>
+            </div>
         </div>
       );
     }
@@ -266,7 +282,7 @@ const App: React.FC = () => {
     if (appState === AppState.RESULT && scanResults.length > 0) {
       return (
         <ResultView 
-          imageSrc={capturedImage || ''} 
+          imageSrc={capturedImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=80'} 
           results={scanResults} 
           selectedIndex={selectedIndex}
           onSelect={(idx) => {
@@ -316,39 +332,13 @@ const App: React.FC = () => {
         <div className="absolute top-0 -left-10 w-72 h-72 bg-indigo-600 rounded-full filter blur-3xl opacity-10 animate-blob"></div>
         <div className="absolute bottom-0 -right-10 w-72 h-72 bg-purple-600 rounded-full filter blur-3xl opacity-10 animate-blob animation-delay-2000"></div>
 
-        {errorMessage && (
-          <div className="absolute top-10 left-6 right-6 z-50">
-             <div className="bg-red-500 text-white p-5 rounded-3xl shadow-2xl flex flex-col items-center text-center space-y-4 border-2 border-white/20">
-                <div className="flex w-full items-start justify-between">
-                   <div className="text-left">
-                      <p className="text-sm font-black font-thai">ตรวจพบข้อผิดพลาด:</p>
-                      <p className="text-[11px] font-thai leading-relaxed opacity-90 mt-1">{errorMessage}</p>
-                   </div>
-                   <button onClick={() => setErrorMessage(null)} className="p-1 hover:bg-white/10 rounded-full"><XMarkIcon className="w-5 h-5" /></button>
-                </div>
-                {isQuotaError && (
-                  <button onClick={handleSelectPersonalKey} className="w-full bg-white text-red-600 px-4 py-3 rounded-2xl text-xs font-black uppercase font-thai shadow-lg">คลิกเพื่อใช้ API Key ส่วนตัว</button>
-                )}
-             </div>
-          </div>
-        )}
-
-        {successMessage && (
-           <div className="absolute top-10 left-6 right-6 z-50 animate-fade-in">
-              <div className="bg-emerald-500 text-white p-4 rounded-2xl shadow-xl flex items-center justify-center gap-3">
-                 <CheckBadgeIcon className="w-6 h-6" />
-                 <span className="font-thai font-bold">{successMessage}</span>
-              </div>
-           </div>
-        )}
-
         <div className="relative z-10 text-center space-y-8 w-full max-w-sm">
           <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700">
             <SparklesIcon className="w-12 h-12 text-indigo-500" />
           </div>
           <div className="space-y-2">
             <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">ThaiSnap Lingo</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-thai font-medium">สแกนสิ่งของหรือพิมพ์เพื่อเรียนรู้</p>
+            <p className="text-slate-500 dark:text-slate-400 font-thai font-medium">รวดเร็วทันใจด้วย AI รุ่นล่าสุด</p>
           </div>
 
           <form onSubmit={handleManualTranslate} className="w-full relative group">
@@ -356,7 +346,7 @@ const App: React.FC = () => {
                 type="text" 
                 value={manualText}
                 onChange={(e) => setManualText(e.target.value)}
-                placeholder={language === 'th' ? "เช่น 'ท้องฟ้า' หรือ 'Sky'..." : "Search anything..."}
+                placeholder={language === 'th' ? "เช่น 'ท้องฟ้า'..." : "Search..."}
                 className="w-full pl-6 pr-14 py-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl focus:ring-4 focus:ring-indigo-500/20 font-thai text-lg"
                 disabled={isTranslating}
               />
@@ -378,11 +368,11 @@ const App: React.FC = () => {
                 reader.readAsDataURL(file);
               }
             }} />
-            <button onClick={() => setAppState(AppState.CAMERA)} className="flex-1 flex items-center justify-center space-x-3 bg-indigo-600 text-white py-5 px-6 rounded-2xl font-black text-lg shadow-xl shadow-indigo-600/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+            <button onClick={() => setAppState(AppState.CAMERA)} className="flex-1 flex items-center justify-center space-x-3 bg-indigo-600 text-white py-5 px-6 rounded-2xl font-black text-lg shadow-xl shadow-indigo-600/20 transition-all hover:scale-105 active:scale-95">
                 <CameraIcon className="w-7 h-7" />
-                <span className="font-thai">กล้อง</span>
+                <span className="font-thai">กล้องสแกน</span>
             </button>
-            <button onClick={() => fileInputRef.current?.click()} className="bg-white dark:bg-slate-800 text-slate-500 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg">
+            <button onClick={() => fileInputRef.current?.click()} className="bg-white dark:bg-slate-800 text-slate-500 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg transition-all hover:bg-slate-50">
                 <PhotoIcon className="w-7 h-7" />
             </button>
           </div>
