@@ -1,5 +1,6 @@
-import React from 'react';
-import { SunIcon, MoonIcon, GlobeIcon, SparklesIcon } from './Icons';
+
+import React, { useState, useEffect } from 'react';
+import { SunIcon, MoonIcon, GlobeIcon, SparklesIcon, Cog6ToothIcon, CheckBadgeIcon } from './Icons';
 import { Language } from '../types';
 
 interface SettingsViewProps {
@@ -10,6 +11,24 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, language, onLanguageChange }) => {
+    const [hasPersonalKey, setHasPersonalKey] = useState(false);
+
+    useEffect(() => {
+        const checkKey = async () => {
+            if (window.aistudio) {
+                const hasKey = await window.aistudio.hasSelectedApiKey();
+                setHasPersonalKey(hasKey);
+            }
+        };
+        checkKey();
+    }, []);
+
+    const handleManageKey = async () => {
+        await window.aistudio.openSelectKey();
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        setHasPersonalKey(hasKey);
+    };
+
     const t = {
         th: {
             title: 'ตั้งค่า',
@@ -23,7 +42,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
             about: 'เกี่ยวกับ',
             version: 'เวอร์ชัน',
             aiLang: 'ภาษา AI',
-            footer: '© 2024 ThaiSnap Lingo • พลังขับเคลื่อนโดย Gemini AI'
+            footer: '© 2024 ThaiSnap Lingo • พลังขับเคลื่อนโดย Gemini AI',
+            apiKey: 'การจัดการ API Key',
+            apiKeyDesc: 'ใช้ Key ส่วนตัวเพื่อเลี่ยงการจำกัดโควตาฟรี',
+            manageKey: 'ตั้งค่า API Key ของคุณ'
         },
         en: {
             title: 'Settings',
@@ -37,7 +59,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
             about: 'About',
             version: 'Version',
             aiLang: 'AI Language',
-            footer: '© 2024 ThaiSnap Lingo • Powered by Gemini AI'
+            footer: '© 2024 ThaiSnap Lingo • Powered by Gemini AI',
+            apiKey: 'API Key Management',
+            apiKeyDesc: 'Use your own key to bypass free quota limits',
+            manageKey: 'Manage Personal Key'
         }
     }[language];
 
@@ -46,15 +71,47 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
             <h1 className={`text-2xl font-bold text-slate-900 dark:text-white mb-2 ${language === 'th' ? 'font-thai' : ''}`}>{t.title}</h1>
             <p className={`text-slate-500 dark:text-slate-400 text-sm mb-8 ${language === 'th' ? 'font-thai' : ''}`}>{t.sub}</p>
 
-            <div className="space-y-6">
+            <div className="space-y-6 flex-1 overflow-y-auto no-scrollbar pb-6">
                 
+                {/* API Key Section */}
+                <div className="space-y-3">
+                    <label className={`text-[10px] uppercase font-black tracking-widest text-indigo-500 px-1 ${language === 'th' ? 'font-thai' : ''}`}>
+                        {t.apiKey}
+                    </label>
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                                <p className={`text-xs text-slate-500 dark:text-slate-400 font-medium ${language === 'th' ? 'font-thai' : ''}`}>{t.apiKeyDesc}</p>
+                                <div className="mt-2 flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${hasPersonalKey ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                        {hasPersonalKey ? 'Personal Key Active' : 'Using System Key (Shared Quota)'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="p-3 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Cog6ToothIcon className="w-6 h-6" />
+                            </div>
+                        </div>
+                        <button 
+                            onClick={handleManageKey}
+                            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 active:scale-[0.98] transition-all font-thai"
+                        >
+                            {t.manageKey}
+                        </button>
+                        <p className="text-[10px] text-slate-400 font-medium text-center italic">
+                            Required to bypass "429 Quota Exceeded" errors. <br/>
+                            Get one at <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-indigo-500 underline">ai.google.dev</a>
+                        </p>
+                    </div>
+                </div>
+
                 {/* Appearance Section */}
                 <div className="space-y-3">
-                    <label className={`text-[10px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500 px-1 ${language === 'th' ? 'font-thai' : ''}`}>
+                    <label className={`text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-500 px-1 ${language === 'th' ? 'font-thai' : ''}`}>
                         {t.appearance}
                     </label>
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm transition-colors duration-500">
-                        {/* Theme Toggle */}
                         <div className="p-2 flex gap-1">
                              <button 
                                 onClick={() => onThemeChange('light')}
@@ -74,7 +131,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
 
                         <div className="h-px bg-slate-100 dark:bg-slate-700 mx-4"></div>
 
-                        {/* Language Selection */}
                         <div className="p-4 space-y-3">
                             <span className={`text-xs text-slate-400 dark:text-slate-500 font-bold block ${language === 'th' ? 'font-thai' : ''}`}>{t.langLabel}</span>
                             <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
@@ -97,7 +153,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
 
                 {/* Info Section */}
                 <div className="space-y-3">
-                    <label className={`text-[10px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500 px-1 ${language === 'th' ? 'font-thai' : ''}`}>
+                    <label className={`text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-500 px-1 ${language === 'th' ? 'font-thai' : ''}`}>
                         {t.about}
                     </label>
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-4 shadow-sm transition-colors duration-500">
@@ -108,7 +164,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
                                 </div>
                                 <span className={`text-slate-900 dark:text-white ${language === 'th' ? 'font-thai' : 'font-medium'}`}>{t.version}</span>
                             </div>
-                            <span className="text-slate-400 font-mono text-sm">1.3.0</span>
+                            <span className="text-slate-400 font-mono text-sm">1.4.0</span>
                         </div>
                         
                         <div className="flex items-center justify-between">
@@ -125,7 +181,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ theme, onThemeChange, langu
 
             </div>
 
-            <div className="mt-auto pb-6 text-center">
+            <div className="pt-4 text-center">
                 <p className={`text-[10px] text-slate-400 font-thai`}>
                     {t.footer}
                 </p>

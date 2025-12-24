@@ -14,6 +14,18 @@ import { AppState, DetectedObject, SentenceExamples, Tab, SavedWord, WordAssocia
 import { identifyObjects, generateSentences, generateRelatedVocabulary, searchAndTranslate } from './services/geminiService';
 import { getSavedWords, saveWord, removeWord, isWordSaved } from './services/storageService';
 
+// จัดการ Type สำหรับ AI Studio tools
+// FIX: Defined AIStudio interface and updated global Window declaration to match expected platform types and modifiers.
+declare global {
+  interface AIStudio {
+    hasSelectedApiKey(): Promise<boolean>;
+    openSelectKey(): Promise<void>;
+  }
+  interface Window {
+    readonly aistudio: AIStudio;
+  }
+}
+
 const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<Tab>(Tab.HOME);
   const [appState, setAppState] = useState<AppState>(AppState.HOME);
@@ -35,6 +47,7 @@ const App: React.FC = () => {
   const [relatedWordsCache, setRelatedWordsCache] = useState<Record<string, WordAssociations>>({});
   const [isLoadingAssociations, setIsLoadingAssociations] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isQuotaError, setIsQuotaError] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [isWordsLoading, setIsWordsLoading] = useState(false);
@@ -79,16 +92,35 @@ const App: React.FC = () => {
     }
   }, [scanResults, selectedIndex, checkSavedStatus]);
 
-  const handleTabChange = (tab: Tab) => {
-    setCurrentTab(tab);
-    if (tab !== Tab.SAVED) setViewingSavedWord(null);
-    if (tab === Tab.SAVED || tab === Tab.FLASHCARDS || tab === Tab.PRACTICE) fetchWords();
+  const handleError = (err: any) => {
+    console.error("App Error:", err);
+    if (err.message?.includes('429') || err.message?.includes('quota') || err.message?.includes('RESOURCE_EXHAUSTED')) {
+      setIsQuotaError(true);
+      setErrorMessage("โควตาฟรีของแอปเต็มแล้ว! โปรดเลือกใช้ API Key ส่วนตัวเพื่อใช้งานต่อ");
+    } else if (err.message?.includes('entity was not found')) {
+      if (window.aistudio?.openSelectKey) {
+        window.aistudio.openSelectKey();
+      }
+    } else {
+      setErrorMessage(err.message || "เกิดข้อผิดพลาด");
+    }
+    setAppState(AppState.HOME);
+    setIsTranslating(false);
+  };
+
+  const handleSelectPersonalKey = async () => {
+    if (window.aistudio?.openSelectKey) {
+      await window.aistudio.openSelectKey();
+      setIsQuotaError(false);
+      setErrorMessage(null);
+    }
   };
 
   const handleImageCaptured = useCallback(async (imageSrc: string) => {
     setCapturedImage(imageSrc);
     setAppState(AppState.ANALYZING);
     setErrorMessage(null);
+    setIsQuotaError(false);
     
     try {
       const base64Data = imageSrc.includes(',') ? imageSrc.split(',')[1] : imageSrc;
@@ -103,8 +135,7 @@ const App: React.FC = () => {
       setSentences(null);
       setAppState(AppState.RESULT);
     } catch (err: any) {
-      setErrorMessage(err.message || "เกิดข้อผิดพลาด");
-      setAppState(AppState.HOME);
+      handleError(err);
     }
   }, []);
 
@@ -115,9 +146,9 @@ const App: React.FC = () => {
     setIsTranslating(true);
     setAppState(AppState.ANALYZING);
     setErrorMessage(null);
+    setIsQuotaError(false);
 
     try {
-      // Fetch everything concurrently for a rich initial experience
       const [searchResult, relatedRes] = await Promise.all([
         searchAndTranslate(manualText),
         generateRelatedVocabulary(manualText)
@@ -140,8 +171,7 @@ const App: React.FC = () => {
       setAppState(AppState.RESULT);
       setManualText(''); 
     } catch (err: any) {
-      setErrorMessage(language === 'th' ? "ไม่พบผลการค้นหา" : "Search error.");
-      setAppState(AppState.HOME);
+      handleError(err);
     } finally {
       setIsTranslating(false);
     }
@@ -157,9 +187,8 @@ const App: React.FC = () => {
       const result = await generateSentences(currentObject.english, currentObject.thai);
       setSentences(result);
       setAppState(AppState.SENTENCES_VIEW);
-    } catch (err) {
-      setErrorMessage("Error generating sentences.");
-      setAppState(AppState.RESULT);
+    } catch (err: any) {
+      handleError(err);
     }
   }, [scanResults, selectedIndex, sentences]);
 
@@ -171,7 +200,7 @@ const App: React.FC = () => {
     try {
         const result = await generateRelatedVocabulary(currentObject.english);
         setRelatedWordsCache(prev => ({ ...prev, [currentObject.english]: result }));
-    } catch (err) { console.error(err); } finally { setIsLoadingAssociations(false); }
+    } catch (err: any) { console.error(err); } finally { setIsLoadingAssociations(false); }
   }, [scanResults, selectedIndex, relatedWordsCache]);
 
   useEffect(() => {
@@ -185,6 +214,13 @@ const App: React.FC = () => {
     fetchWords();
   };
 
+  const handleTabChange = useCallback((tab: Tab) => {
+    setCurrentTab(tab);
+    if (tab === Tab.HOME) {
+      setAppState(AppState.HOME);
+    }
+  }, []);
+
   const renderContent = () => {
     if (currentTab === Tab.SETTINGS) {
         return <SettingsView theme={theme} onThemeChange={setTheme} language={language} onLanguageChange={setLanguage} />;
@@ -194,7 +230,13 @@ const App: React.FC = () => {
       if (viewingSavedWord) {
          return (
              <SentencesModal 
-                result={{ english: viewingSavedWord.english, thai: viewingSavedWord.thai, confidence: 1, box_2d: [0,0,0,0], imageUrls: viewingSavedWord.imageUrls }}
+                result={{ 
+                  english: viewingSavedWord.english, 
+                  thai: viewingSavedWord.thai, 
+                  confidence: 1, 
+                  box_2d: [0,0,0,0], 
+                  imageUrls: viewingSavedWord.imageUrls 
+                }}
                 sentences={viewingSavedWord.sentences || null}
                 onBack={() => setViewingSavedWord(null)}
                 onSave={() => {}} 
@@ -214,7 +256,7 @@ const App: React.FC = () => {
       return (
         <div className="relative h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
-            <p className="text-white text-xl font-bold font-thai">กำลังดึงข้อมูลและรูปภาพจากเน็ต...</p>
+            <p className="text-white text-xl font-bold font-thai animate-pulse">กำลังประมวลผลข้อมูลอัจฉริยะ...</p>
         </div>
       );
     }
@@ -269,22 +311,32 @@ const App: React.FC = () => {
         <div className="absolute bottom-0 -right-10 w-72 h-72 bg-purple-600 rounded-full filter blur-3xl opacity-10 dark:opacity-20 animate-blob animation-delay-2000"></div>
 
         {errorMessage && (
-          <div className="absolute top-10 left-6 right-6 z-50 animate-bounce-short">
-             <div className="bg-red-500 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between">
-                <p className="text-sm font-bold font-thai">{errorMessage}</p>
-                <button onClick={() => setErrorMessage(null)} className="p-1 hover:bg-white/10 rounded-full"><XMarkIcon className="w-4 h-4" /></button>
+          <div className="absolute top-10 left-6 right-6 z-50">
+             <div className="bg-red-500 text-white p-4 rounded-2xl shadow-2xl flex flex-col items-center text-center space-y-3">
+                <div className="flex w-full items-center justify-between">
+                   <p className="text-sm font-bold font-thai">{errorMessage}</p>
+                   <button onClick={() => setErrorMessage(null)} className="p-1 hover:bg-white/10 rounded-full"><XMarkIcon className="w-4 h-4" /></button>
+                </div>
+                {isQuotaError && (
+                  <button 
+                    onClick={handleSelectPersonalKey}
+                    className="bg-white text-red-600 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg font-thai"
+                  >
+                     คลิกเพื่อใช้ API Key ของตัวเอง
+                  </button>
+                )}
              </div>
           </div>
         )}
 
         <div className="relative z-10 text-center space-y-8 w-full max-w-sm">
-          <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-xl mx-auto">
+          <div className="inline-flex p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-xl mx-auto border border-slate-100 dark:border-slate-700">
             <SparklesIcon className="w-12 h-12 text-indigo-500" />
           </div>
           
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold text-slate-900 dark:text-white">ThaiSnap Lingo</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-thai">พิมพ์เพื่อหาความหมายและรูปภาพ</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">ThaiSnap Lingo</h1>
+            <p className="text-slate-500 dark:text-slate-400 font-thai font-medium opacity-80">ค้นหาความหมายจากภาพและคำศัพท์</p>
           </div>
 
           <form onSubmit={handleManualTranslate} className="w-full relative group">
@@ -292,20 +344,20 @@ const App: React.FC = () => {
                 type="text" 
                 value={manualText}
                 onChange={(e) => setManualText(e.target.value)}
-                placeholder={language === 'th' ? "พิมพ์คำที่ต้องการ เช่น 'ทะเล' หรือ 'Coffee'..." : "Search anything..."}
-                className="w-full pl-5 pr-14 py-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-thai"
+                placeholder={language === 'th' ? "เช่น 'ท้องฟ้า' หรือ 'Sky'..." : "Search anything..."}
+                className="w-full pl-6 pr-14 py-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/20 transition-all font-thai text-lg"
                 disabled={isTranslating}
               />
               <button 
                 type="submit"
                 disabled={isTranslating}
-                className="absolute right-2 top-2 p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition shadow-md disabled:opacity-50"
+                className="absolute right-2 top-2 p-3.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition shadow-lg disabled:opacity-50"
               >
-                {isTranslating ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <GlobeIcon className="w-5 h-5" />}
+                {isTranslating ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <GlobeIcon className="w-6 h-6" />}
               </button>
           </form>
 
-          <div className="flex items-center gap-4 w-full">
+          <div className="flex items-center gap-4 w-full pt-4">
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
@@ -316,16 +368,16 @@ const App: React.FC = () => {
             }} />
             <button
                 onClick={() => setAppState(AppState.CAMERA)}
-                className="group flex-1 flex items-center justify-center space-x-2 bg-indigo-600 text-white py-4 px-6 rounded-2xl font-bold text-lg shadow-lg hover:scale-105 transition-all"
+                className="group flex-1 flex items-center justify-center space-x-3 bg-indigo-600 text-white py-5 px-6 rounded-2xl font-black text-lg shadow-xl shadow-indigo-600/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
-                <CameraIcon className="w-6 h-6" />
-                <span className="font-thai">ถ่ายภาพ</span>
+                <CameraIcon className="w-7 h-7" />
+                <span className="font-thai">สแกนจากกล้อง</span>
             </button>
             <button
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-white dark:bg-slate-800 text-slate-500 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg transition-all"
+                className="bg-white dark:bg-slate-800 text-slate-500 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-lg hover:bg-slate-50 transition-all"
             >
-                <PhotoIcon className="w-6 h-6" />
+                <PhotoIcon className="w-7 h-7" />
             </button>
           </div>
         </div>
