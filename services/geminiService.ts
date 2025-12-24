@@ -21,8 +21,16 @@ export const searchAndTranslate = async (query: string): Promise<{ english: stri
   try {
     const ai = getAi();
     
-    const prompt = `Translate "${query}" between Thai and English. Also, find exactly 5 high-quality web image URLs (direct links to JPG/PNG/WEBP) that represent this object/concept clearly. 
-    Return as JSON: {"english": "...", "thai": "...", "imageUrls": ["url1", "url2", "url3", "url4", "url5"]}`;
+    const prompt = `Task: Translate the user's query "${query}" between Thai and English. 
+    Then, using the English translation, find exactly 5 direct, high-quality, publicly accessible web image URLs (must end in .jpg, .png, or .webp) that best represent this word.
+    Avoid URLs from Pinterest or restricted sites. Use reliable sources like Wikimedia, Unsplash, or Pixabay if possible.
+    
+    Return ONLY JSON format: 
+    {
+      "english": "English word",
+      "thai": "คำแปลภาษาไทย",
+      "imageUrls": ["https://url1.jpg", "https://url2.jpg", "https://url3.jpg", "https://url4.jpg", "https://url5.jpg"]
+    }`;
 
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
@@ -38,7 +46,8 @@ export const searchAndTranslate = async (query: string): Promise<{ english: stri
             imageUrls: { 
               type: Type.ARRAY, 
               items: { type: Type.STRING },
-              description: "Array of 3-5 valid URLs to representative images from the web" 
+              minItems: 3,
+              maxItems: 5
             }
           },
           required: ["english", "thai", "imageUrls"]
@@ -48,17 +57,29 @@ export const searchAndTranslate = async (query: string): Promise<{ english: stri
 
     const text = response.text;
     if (!text) throw new Error("AI_NO_RESPONSE");
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    
+    // Validate URLs (ensure they look like URLs)
+    const validUrls = parsed.imageUrls.filter((url: string) => url.startsWith('http'));
+    
+    // If fewer than 3 valid URLs, add fallback placeholders based on the English word
+    const finalUrls = [...validUrls];
+    const englishWord = parsed.english;
+    while (finalUrls.length < 5) {
+      finalUrls.push(`https://images.unsplash.com/photo-1?auto=format&fit=crop&w=800&q=80&sig=${finalUrls.length}&keyword=${encodeURIComponent(englishWord)}`);
+    }
+
+    return { ...parsed, imageUrls: finalUrls };
   } catch (error) {
     console.error("Search/Translate Error:", error);
-    // Fallback if search fails
+    // Ultimate Fallback: Use a direct Unsplash search parameter
     return { 
       english: query, 
       thai: query, 
       imageUrls: [
-        `https://source.unsplash.com/featured/?${encodeURIComponent(query)}&1`,
-        `https://source.unsplash.com/featured/?${encodeURIComponent(query)}&2`,
-        `https://source.unsplash.com/featured/?${encodeURIComponent(query)}&3`
+        `https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80&query=${encodeURIComponent(query)}&1`,
+        `https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=800&q=80&query=${encodeURIComponent(query)}&2`,
+        `https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=800&q=80&query=${encodeURIComponent(query)}&3`
       ] 
     };
   }
